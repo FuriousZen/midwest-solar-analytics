@@ -166,6 +166,27 @@ def final_table(seg: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def per_jurisdiction_table(seg: str) -> str:
+    import csv
+
+    path = REPORTS_DIR / seg / "holdout_by_jurisdiction.csv"
+    if not path.exists():
+        return "_holdout_by_jurisdiction.csv missing._\n"
+    rows = list(csv.DictReader(path.open()))
+    lines = [
+        "| jurisdiction | holdout n | median actual (d) | MAE (d) | median AE (d) | bias (d) | interval coverage |",
+        "|---|---:|---:|---:|---:|---:|---:|",
+    ]
+    for r in rows:
+        lines.append(
+            f"| {r['jurisdiction']} | {int(float(r['n']))} | "
+            f"{float(r['median_actual_days']):.0f} | {float(r['mae_days']):.1f} | "
+            f"{float(r['median_ae_days']):.1f} | {float(r['bias_days']):+.1f} | "
+            f"{float(r['interval_coverage']) * 100:.0f}% |"
+        )
+    return "\n".join(lines) + "\n"
+
+
 def mlflow_section() -> str:
     s = _read(REPORTS_DIR / "mlflow_runs_summary.json")
     if not s:
@@ -336,6 +357,10 @@ def main() -> None:
             "### Final tuned model",
             "",
             final_table(seg),
+            "",
+            "### Holdout accuracy by jurisdiction",
+            "",
+            per_jurisdiction_table(seg),
             "",
         ]
     parts += [

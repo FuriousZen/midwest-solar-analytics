@@ -318,6 +318,36 @@ def run(segment: str, log_to_mlflow: bool = True) -> dict:
         rd / "oof_predictions.csv", index=False
     )
 
+    # per-jurisdiction holdout breakdown: a single pooled MAE hides that some
+    # registers are far more predictable than others
+    per_juris = (
+        pd.DataFrame(
+            {
+                "jurisdiction": ds.meta_test["jurisdiction"].to_numpy(),
+                "y_true": ds.y_test.to_numpy(),
+                "y_pred": test_pred,
+                "covered": covered,
+            }
+        )
+        .groupby("jurisdiction")
+        .apply(
+            lambda g: pd.Series(
+                {
+                    "n": len(g),
+                    "median_actual_days": float(g["y_true"].median()),
+                    "mae_days": float(np.abs(g["y_true"] - g["y_pred"]).mean()),
+                    "median_ae_days": float(np.abs(g["y_true"] - g["y_pred"]).median()),
+                    "bias_days": float((g["y_pred"] - g["y_true"]).mean()),
+                    "interval_coverage": float(g["covered"].mean()),
+                }
+            ),
+            include_groups=False,
+        )
+        .reset_index()
+        .sort_values("n", ascending=False)
+    )
+    per_juris.to_csv(rd / "holdout_by_jurisdiction.csv", index=False)
+
     if log_to_mlflow:
         with mlflow.start_run(run_name=f"final-{segment}"):
             mlflow.set_tags(
