@@ -12,3 +12,8 @@ data/processed/
 .ipynb_checkpoints/
 .pytest_cache/
 .ruff_cache/
+*.egg-info/
+models/
+reports/*.html
+reports/*.png
+!reports/.gitkeep
