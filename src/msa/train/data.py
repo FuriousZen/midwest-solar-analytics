@@ -7,18 +7,54 @@ from dataclasses import dataclass
 
 import pandas as pd
 
-from msa.config import PROCESSED_DIR, RANDOM_SEED
-from msa.features.build import CATEGORICAL_FEATURES, build_features
+from msa.config import DEFAULT_SEGMENT, PROCESSED_DIR, RANDOM_SEED
+from msa.features.build import CATEGORICAL_FEATURES, build_features, clean
 
 LOG = logging.getLogger(__name__)
 
 DATASET_PATH = PROCESSED_DIR / "installations.parquet"
 
-#: Fraction of the (chronologically ordered) data held out as the final test
-#: set. The split is by application date, never random, so the reported test
-#: metrics answer the question a deployed service actually faces: "how well
-#: does a model fitted on the past predict permits filed later?"
+#: Fraction of the data held out as the final test set. The split is always by
+#: date, never random, so the reported test metrics answer the question a
+#: deployed service actually faces: "how well does a model fitted on the past
+#: predict projects that start later?"
 TEST_FRACTION = 0.20
+
+#: ``global``          one cut-off date across the whole corpus.
+#: ``by_jurisdiction`` each jurisdiction contributes its own most-recent 20%.
+#:
+#: ``by_jurisdiction`` is the default because the corpus is assembled from
+#: registers whose coverage windows differ by up to a decade (Saint Paul stops
+#: in 2025-06, Overland Park starts in 2024-01). A single global cut-off
+#: therefore changes the *mix of cities* between train and test as well as the
+#: time period, which confounds "does this generalise forward in time?" with
+#: "does this generalise to a different city?". Splitting inside each
+#: jurisdiction isolates the temporal question. The global split is still
+#: computed and reported alongside it -- see reports/final_metrics.json.
+DEFAULT_SPLIT_STRATEGY = "by_jurisdiction"
+
+
+def _holdout_mask(
+    meta: pd.DataFrame, test_fraction: float, strategy: str
+) -> tuple[pd.Series, pd.Timestamp]:
+    if strategy == "global":
+        cutoff_idx = int(len(meta) * (1.0 - test_fraction))
+        split_date = meta["start_date"].sort_values().iloc[cutoff_idx]
+        return meta["start_date"] >= split_date, pd.Timestamp(split_date)
+
+    if strategy != "by_jurisdiction":
+        raise ValueError(f"unknown split strategy {strategy!r}")
+
+    is_test = pd.Series(False, index=meta.index)
+    for _, idx in meta.groupby("jurisdiction", sort=False).groups.items():
+        sub = meta.loc[idx].sort_values("start_date")
+        k = int(len(sub) * (1.0 - test_fraction))
+        if k >= len(sub):
+            continue
+        cutoff = sub["start_date"].iloc[k]
+        is_test.loc[idx] = meta.loc[idx, "start_date"] >= cutoff
+    median_cut = meta.loc[is_test, "start_date"].min()
+    return is_test, pd.Timestamp(median_cut)
 
 
 @dataclass(frozen=True)
@@ -31,6 +67,7 @@ class Dataset:
     meta_test: pd.DataFrame
     split_date: pd.Timestamp
     categories: dict[str, list[str]]
+    segment: str
 
     @property
     def n_train(self) -> int:
@@ -61,19 +98,20 @@ def load_tts():
 
 
 def load_dataset(
-    path=DATASET_PATH, test_fraction: float = TEST_FRACTION, with_tts: bool = True
+    path=DATASET_PATH,
+    test_fraction: float = TEST_FRACTION,
+    with_tts: bool = True,
+    segment: str = DEFAULT_SEGMENT,
+    split_strategy: str = DEFAULT_SPLIT_STRATEGY,
 ) -> Dataset:
-    df = load_raw(path)
+    df = clean(load_raw(path), segment=segment)
     tts_df = load_tts() if with_tts else None
     X, y = build_features(df, tts_df)
     meta = df.sort_values(["start_date", "record_id"]).reset_index(drop=True)[
         ["record_id", "source", "jurisdiction", "state", "start_date", "end_date"]
     ]
 
-    cutoff_idx = int(len(X) * (1.0 - test_fraction))
-    split_date = meta.loc[cutoff_idx, "start_date"]
-    # push the boundary to a clean date so identical days do not straddle folds
-    is_test = meta["start_date"] >= split_date
+    is_test, split_date = _holdout_mask(meta, test_fraction, split_strategy)
 
     categories = {
         c: list(map(str, X[c].cat.categories)) for c in CATEGORICAL_FEATURES
@@ -88,6 +126,7 @@ def load_dataset(
         meta_test=meta.loc[is_test].reset_index(drop=True),
         split_date=pd.Timestamp(split_date),
         categories=categories,
+        segment=segment,
     )
     LOG.info(
         "dataset: %d train (< %s) / %d test (>= %s)",

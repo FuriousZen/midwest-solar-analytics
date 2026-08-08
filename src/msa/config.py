@@ -110,7 +110,8 @@ SEGMENTS: dict[str, tuple[str, str]] = {
     "application_to_completion": ("application_date", "completion_date"),
 }
 
-DEFAULT_SEGMENT = os.environ.get("MSA_SEGMENT", "pooled")
+#: The project's headline model predicts the field installation timeline.
+DEFAULT_SEGMENT = os.environ.get("MSA_SEGMENT", "permit_to_completion")
 
 #: Modelling horizon per segment. 0 days is legitimate (same-day
 #: over-the-counter permits, or an inspection closed the day it was issued).
@@ -119,10 +120,14 @@ DEFAULT_SEGMENT = os.environ.get("MSA_SEGMENT", "pooled")
 #: target distribution. Each bound covers >=98% of the observed rows for that
 #: segment -- see reports/dataset_summary.json for the realised percentages.
 MIN_TIMELINE_DAYS = 0
+#: Coverage of the observed duration distribution at each bound, measured on
+#: the assembled corpus (scripts/report_horizon_coverage.py):
+#:   application_to_issue   <=120d covers 99.3% of rows
+#:   permit_to_completion   <=365d covers 95.6% of rows
 MAX_TIMELINE_DAYS_BY_SEGMENT: dict[str, int] = {
     "application_to_issue": 120,
-    "permit_to_completion": 730,
-    "application_to_completion": 730,
+    "permit_to_completion": 365,
+    "application_to_completion": 365,
 }
 
 #: Right-censoring guard. A project whose clock started less than
