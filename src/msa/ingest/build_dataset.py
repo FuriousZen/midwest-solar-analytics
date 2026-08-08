@@ -26,16 +26,25 @@ SOURCE_MODULES: tuple[str, ...] = (
     "minneapolis",
     "saintpaul",
     "goldenvalley",
+    "kansascity",
+    "cincinnati",
 )
 
 
 def _sources() -> dict[str, Callable[..., pd.DataFrame]]:
+    """Every registered ingester, keyed by its canonical ``source`` value."""
     import importlib
 
     out: dict[str, Callable[..., pd.DataFrame]] = {}
     for name in SOURCE_MODULES:
         mod = importlib.import_module(f"msa.ingest.{name}")
         out[mod.SOURCE_KEY] = mod.load
+
+    # the small ArcGIS registers share one declarative module
+    from msa.ingest import arcgis_permits
+
+    for key in arcgis_permits.LAYERS:
+        out[key] = arcgis_permits.make_module_api(key)[1]
     return out
 
 

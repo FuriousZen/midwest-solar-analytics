@@ -43,6 +43,27 @@ def _get_json(url: str, params: dict) -> dict:
     raise RuntimeError(f"ArcGIS request failed after {_MAX_RETRIES} attempts") from last
 
 
+def parse_esri_date(series: pd.Series) -> pd.Series:
+    """Normalise an ArcGIS date column to naive daily timestamps.
+
+    ArcGIS returns ``esriFieldTypeDate`` as epoch **milliseconds** but
+    ``esriFieldTypeDateOnly`` as an ISO ``YYYY-MM-DD`` **string**, and different
+    layers use different types for the same concept (Detroit's BSEED layer uses
+    DateOnly; Minneapolis uses Date). Handle both rather than guessing.
+    """
+    numeric = pd.to_numeric(series, errors="coerce")
+    if numeric.notna().any():
+        out = pd.to_datetime(numeric, unit="ms", errors="coerce")
+        # rows that were not numeric may still be parseable strings
+        leftover = out.isna() & series.notna()
+        if leftover.any():
+            out.loc[leftover] = pd.to_datetime(
+                series[leftover], errors="coerce", format="mixed"
+            )
+        return out.dt.normalize()
+    return pd.to_datetime(series, errors="coerce", format="mixed").dt.normalize()
+
+
 def describe(layer_url: str) -> dict:
     """Return the layer metadata document (field names, types, row cap)."""
     return _get_json(layer_url, {"f": "json"})
@@ -105,8 +126,7 @@ def query(
     df = pd.DataFrame(rows)
     for c in date_fields:
         if c in df.columns:
-            # epoch milliseconds -> naive UTC timestamps, then drop the time part
-            df[c] = pd.to_datetime(df[c], unit="ms", errors="coerce").dt.normalize()
+            df[c] = parse_esri_date(df[c])
     if cache_path is not None:
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(cache_path, index=False)
