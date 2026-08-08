@@ -248,12 +248,11 @@ def run(segment: str, log_to_mlflow: bool = True) -> dict:
     lo = np.clip(raw_lo - conformal_delta, 0.0, None)
     hi = raw_hi + conformal_delta
     y_true = ds.y_test.to_numpy()
+    covered = (y_true >= lo) & (y_true <= hi)
     interval = {
         "interval_nominal_coverage": QUANTILES[2] - QUANTILES[0],
         "conformal_delta_days": float(conformal_delta),
-        "interval_empirical_coverage_test": float(
-            ((y_true >= lo) & (y_true <= hi)).mean()
-        ),
+        "interval_empirical_coverage_test": float(covered.mean()),
         "interval_uncalibrated_coverage_test": float(
             ((y_true >= raw_lo) & (y_true <= raw_hi)).mean()
         ),
