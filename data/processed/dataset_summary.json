@@ -1,0 +1,427 @@
+{
+  "total_records": 29425,
+  "rows_with_usable_duration_by_segment": {
+    "permit_to_completion": 12108,
+    "application_to_issue": 21884,
+    "application_to_completion": 5960
+  },
+  "sources": [
+    {
+      "source": "ames_permits",
+      "jurisdiction": "Ames",
+      "state": "IA",
+      "records": 262,
+      "permit_to_completion": {
+        "rows": 237,
+        "median_days": 43.0,
+        "mean_days": 126.52742616033755,
+        "p90_days": 330.4
+      },
+      "application_to_issue": {
+        "rows": 259,
+        "median_days": 11.0,
+        "mean_days": 24.513513513513512,
+        "p90_days": 70.20000000000002
+      },
+      "application_to_completion": {
+        "rows": 237,
+        "median_days": 64.0,
+        "mean_days": 151.15189873417722,
+        "p90_days": 354.6
+      },
+      "application_date_range": [
+        "2015-11-13",
+        "2026-08-03"
+      ],
+      "issue_date_range": [
+        "2015-12-15",
+        "2026-08-03"
+      ],
+      "completion_date_range": [
+        "2016-01-05",
+        "2026-08-03"
+      ]
+    },
+    {
+      "source": "bismarck_permits",
+      "jurisdiction": "Bismarck",
+      "state": "ND",
+      "records": 16,
+      "permit_to_completion": {
+        "rows": 3,
+        "median_days": 507.0,
+        "mean_days": 517.0,
+        "p90_days": 807.8
+      },
+      "application_to_issue": {
+        "rows": 11,
+        "median_days": 10.0,
+        "mean_days": 29.545454545454547,
+        "p90_days": 125.0
+      },
+      "application_to_completion": {
+        "rows": 3,
+        "median_days": 507.0,
+        "mean_days": 520.3333333333334,
+        "p90_days": 807.8
+      },
+      "application_date_range": [
+        "2022-09-22",
+        "2026-05-05"
+      ],
+      "issue_date_range": [
+        "2022-09-22",
+        "2026-07-16"
+      ],
+      "completion_date_range": [
+        "2024-11-15",
+        "2025-02-21"
+      ]
+    },
+    {
+      "source": "chicago_permits",
+      "jurisdiction": "Chicago",
+      "state": "IL",
+      "records": 12873,
+      "permit_to_completion": {
+        "rows": 0,
+        "median_days": null,
+        "mean_days": null,
+        "p90_days": null
+      },
+      "application_to_issue": {
+        "rows": 12873,
+        "median_days": 8.0,
+        "mean_days": 11.225044667132758,
+        "p90_days": 17.0
+      },
+      "application_to_completion": {
+        "rows": 0,
+        "median_days": null,
+        "mean_days": null,
+        "p90_days": null
+      },
+      "application_date_range": [
+        "2006-02-22",
+        "2026-08-04"
+      ],
+      "issue_date_range": [
+        "2006-02-22",
+        "2026-08-06"
+      ],
+      "completion_date_range": null
+    },
+    {
+      "source": "cincinnati_permits",
+      "jurisdiction": "Cincinnati",
+      "state": "OH",
+      "records": 1089,
+      "permit_to_completion": {
+        "rows": 785,
+        "median_days": 204.0,
+        "mean_days": 295.4203821656051,
+        "p90_days": 653.6
+      },
+      "application_to_issue": {
+        "rows": 1025,
+        "median_days": 14.0,
+        "mean_days": 20.090731707317072,
+        "p90_days": 46.0
+      },
+      "application_to_completion": {
+        "rows": 785,
+        "median_days": 219.0,
+        "mean_days": 313.67388535031847,
+        "p90_days": 670.6
+      },
+      "application_date_range": [
+        "2014-06-17",
+        "2026-08-06"
+      ],
+      "issue_date_range": [
+        "2014-08-25",
+        "2026-08-06"
+      ],
+      "completion_date_range": [
+        "2014-08-28",
+        "2026-07-28"
+      ]
+    },
+    {
+      "source": "cleveland_permits",
+      "jurisdiction": "Cleveland",
+      "state": "OH",
+      "records": 1066,
+      "permit_to_completion": {
+        "rows": 0,
+        "median_days": null,
+        "mean_days": null,
+        "p90_days": null
+      },
+      "application_to_issue": {
+        "rows": 1066,
+        "median_days": 24.0,
+        "mean_days": 41.60506566604128,
+        "p90_days": 92.0
+      },
+      "application_to_completion": {
+        "rows": 0,
+        "median_days": null,
+        "mean_days": null,
+        "p90_days": null
+      },
+      "application_date_range": [
+        "2015-01-14",
+        "2026-07-21"
+      ],
+      "issue_date_range": [
+        "2015-01-14",
+        "2026-07-21"
+      ],
+      "completion_date_range": null
+    },
+    {
+      "source": "detroit_permits",
+      "jurisdiction": "Detroit",
+      "state": "MI",
+      "records": 697,
+      "permit_to_completion": {
+        "rows": 0,
+        "median_days": null,
+        "mean_days": null,
+        "p90_days": null
+      },
+      "application_to_issue": {
+        "rows": 697,
+        "median_days": 26.0,
+        "mean_days": 38.72596843615495,
+        "p90_days": 78.0
+      },
+      "application_to_completion": {
+        "rows": 0,
+        "median_days": null,
+        "mean_days": null,
+        "p90_days": null
+      },
+      "application_date_range": [
+        "2018-12-13",
+        "2026-07-14"
+      ],
+      "issue_date_range": [
+        "2019-01-11",
+        "2026-08-05"
+      ],
+      "completion_date_range": null
+    },
+    {
+      "source": "goldenvalley_permits",
+      "jurisdiction": "Golden Valley",
+      "state": "MN",
+      "records": 670,
+      "permit_to_completion": {
+        "rows": 585,
+        "median_days": 61.0,
+        "mean_days": 103.26495726495726,
+        "p90_days": 267.4000000000002
+      },
+      "application_to_issue": {
+        "rows": 658,
+        "median_days": 6.0,
+        "mean_days": 23.59726443768997,
+        "p90_days": 82.0
+      },
+      "application_to_completion": {
+        "rows": 586,
+        "median_days": 81.0,
+        "mean_days": 127.34982935153583,
+        "p90_days": 303.0
+      },
+      "application_date_range": [
+        "2010-09-28",
+        "2026-07-14"
+      ],
+      "issue_date_range": [
+        "2010-09-29",
+        "2026-07-07"
+      ],
+      "completion_date_range": [
+        "2012-03-21",
+        "2026-07-14"
+      ]
+    },
+    {
+      "source": "kansascity_permits",
+      "jurisdiction": "Kansas City",
+      "state": "MO",
+      "records": 4550,
+      "permit_to_completion": {
+        "rows": 3581,
+        "median_days": 33.0,
+        "mean_days": 61.56660150795867,
+        "p90_days": 128.0
+      },
+      "application_to_issue": {
+        "rows": 4450,
+        "median_days": 2.0,
+        "mean_days": 6.133483146067416,
+        "p90_days": 13.0
+      },
+      "application_to_completion": {
+        "rows": 3655,
+        "median_days": 38.0,
+        "mean_days": 68.31928864569083,
+        "p90_days": 140.0
+      },
+      "application_date_range": [
+        "2007-09-10",
+        "2026-08-05"
+      ],
+      "issue_date_range": [
+        "2007-09-10",
+        "2026-08-07"
+      ],
+      "completion_date_range": [
+        "2007-11-15",
+        "2026-07-16"
+      ]
+    },
+    {
+      "source": "minneapolis_permits",
+      "jurisdiction": "Minneapolis",
+      "state": "MN",
+      "records": 3443,
+      "permit_to_completion": {
+        "rows": 3134,
+        "median_days": 77.0,
+        "mean_days": 180.42182514358646,
+        "p90_days": 477.40000000000055
+      },
+      "application_to_issue": {
+        "rows": 0,
+        "median_days": null,
+        "mean_days": null,
+        "p90_days": null
+      },
+      "application_to_completion": {
+        "rows": 0,
+        "median_days": null,
+        "mean_days": null,
+        "p90_days": null
+      },
+      "application_date_range": null,
+      "issue_date_range": [
+        "2016-12-02",
+        "2026-08-06"
+      ],
+      "completion_date_range": [
+        "2017-04-04",
+        "2026-08-06"
+      ]
+    },
+    {
+      "source": "naperville_permits",
+      "jurisdiction": "Naperville",
+      "state": "IL",
+      "records": 850,
+      "permit_to_completion": {
+        "rows": 554,
+        "median_days": 106.0,
+        "mean_days": 150.7057761732852,
+        "p90_days": 342.0
+      },
+      "application_to_issue": {
+        "rows": 717,
+        "median_days": 28.0,
+        "mean_days": 39.93444909344491,
+        "p90_days": 82.0
+      },
+      "application_to_completion": {
+        "rows": 590,
+        "median_days": 134.0,
+        "mean_days": 181.58305084745763,
+        "p90_days": 367.0
+      },
+      "application_date_range": [
+        "2022-11-01",
+        "2026-07-29"
+      ],
+      "issue_date_range": [
+        "2022-11-30",
+        "2026-07-30"
+      ],
+      "completion_date_range": [
+        "2023-11-08",
+        "2026-07-28"
+      ]
+    },
+    {
+      "source": "overlandpark_permits",
+      "jurisdiction": "Overland Park",
+      "state": "KS",
+      "records": 128,
+      "permit_to_completion": {
+        "rows": 104,
+        "median_days": 43.0,
+        "mean_days": 53.66346153846154,
+        "p90_days": 114.50000000000001
+      },
+      "application_to_issue": {
+        "rows": 128,
+        "median_days": 6.0,
+        "mean_days": 14.65625,
+        "p90_days": 34.3
+      },
+      "application_to_completion": {
+        "rows": 104,
+        "median_days": 58.0,
+        "mean_days": 68.59615384615384,
+        "p90_days": 117.0
+      },
+      "application_date_range": [
+        "2023-12-18",
+        "2026-04-30"
+      ],
+      "issue_date_range": [
+        "2024-01-11",
+        "2026-08-03"
+      ],
+      "completion_date_range": [
+        "2024-02-15",
+        "2026-07-17"
+      ]
+    },
+    {
+      "source": "saintpaul_permits",
+      "jurisdiction": "Saint Paul",
+      "state": "MN",
+      "records": 3781,
+      "permit_to_completion": {
+        "rows": 3125,
+        "median_days": 63.0,
+        "mean_days": 104.15808,
+        "p90_days": 216.0
+      },
+      "application_to_issue": {
+        "rows": 0,
+        "median_days": null,
+        "mean_days": null,
+        "p90_days": null
+      },
+      "application_to_completion": {
+        "rows": 0,
+        "median_days": null,
+        "mean_days": null,
+        "p90_days": null
+      },
+      "application_date_range": null,
+      "issue_date_range": [
+        "2015-07-01",
+        "2025-06-30"
+      ],
+      "completion_date_range": [
+        "2015-07-06",
+        "2025-06-30"
+      ]
+    }
+  ]
+}

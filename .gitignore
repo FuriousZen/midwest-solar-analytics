@@ -7,7 +7,10 @@ mlruns/
 mlartifacts/
 data/raw/
 data/interim/
-data/processed/
+# the processed parquet is a build artifact, but its summary is the evidence
+# that the ingest produced what the README says it produced
+data/processed/*
+!data/processed/dataset_summary.json
 *.db
 .ipynb_checkpoints/
 .pytest_cache/
