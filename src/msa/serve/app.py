@@ -136,8 +136,8 @@ def _attributions(X: pd.DataFrame, row: int, bundle: ModelBundle) -> list[Attrib
     return out
 
 
-def create_app(segment: str = SEGMENT) -> FastAPI:
-    bundle = ModelBundle(segment)
+def create_app(segment: str = SEGMENT, root: Path = MODELS_DIR) -> FastAPI:
+    bundle = ModelBundle(segment, root)
     latencies: deque[float] = deque(maxlen=5000)
     counters = {"predict": 0, "predict_batch": 0, "errors": 0}
 
@@ -250,4 +250,27 @@ def create_app(segment: str = SEGMENT) -> FastAPI:
     return app
 
 
-app = create_app()
+class _LazyASGI:
+    """Defer model loading until the server actually starts.
+
+    ``uvicorn msa.serve.app:app`` needs an importable ASGI object, but importing
+    this module must not require a trained model on disk -- otherwise the test
+    suite and the docs tooling cannot import it at all. The bundle is built on
+    the first request/lifespan event instead.
+    """
+
+    def __init__(self, segment: str = SEGMENT):
+        self._segment = segment
+        self._app: FastAPI | None = None
+
+    @property
+    def app(self) -> FastAPI:
+        if self._app is None:
+            self._app = create_app(self._segment)
+        return self._app
+
+    async def __call__(self, scope, receive, send):  # pragma: no cover - ASGI glue
+        await self.app(scope, receive, send)
+
+
+app = _LazyASGI()

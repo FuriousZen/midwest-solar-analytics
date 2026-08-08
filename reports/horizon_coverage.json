@@ -1,0 +1,38 @@
+{
+  "permit_to_completion": {
+    "rows_with_both_dates": 12108,
+    "horizon_days": 365,
+    "coverage_pct": 93.02,
+    "quantiles": {
+      "p50": 59.0,
+      "p75": 129.0,
+      "p90": 278.0,
+      "p95": 472.0,
+      "p99": 1133.510000000002
+    }
+  },
+  "application_to_issue": {
+    "rows_with_both_dates": 21884,
+    "horizon_days": 120,
+    "coverage_pct": 98.62,
+    "quantiles": {
+      "p50": 7.0,
+      "p75": 13.0,
+      "p90": 31.0,
+      "p95": 55.0,
+      "p99": 144.0
+    }
+  },
+  "application_to_completion": {
+    "rows_with_both_dates": 5960,
+    "horizon_days": 365,
+    "coverage_pct": 92.53,
+    "quantiles": {
+      "p50": 59.0,
+      "p75": 134.0,
+      "p90": 312.0,
+      "p95": 447.10000000000036,
+      "p99": 841.0999999999985
+    }
+  }
+}
