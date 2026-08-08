@@ -14,7 +14,15 @@ import re
 import numpy as np
 import pandas as pd
 
-#: Confirms the record really is a photovoltaic installation.
+#: Candidate match. Deliberately **recall-first**: the final bare ``SOLAR``
+#: alternative subsumes the specific phrases before it, so in practice this
+#: matches "contains SOLAR, PHOTOVOLT or PV". Municipal scope-of-work text is
+#: written by hundreds of different clerks and contractors ("Tesla Solar Roof",
+#: "ballasted racking system for solar module", "COLLECTOR CAPACITY 6.16 KW"),
+#: so an enumerated whitelist loses real installations. Precision is recovered
+#: by ``NON_PV_RE`` below, which is the part that actually does the work.
+#: The specific phrases are kept because they document the shapes seen in the
+#: corpus and would still match if the bare alternative were ever tightened.
 PV_RE = re.compile(
     r"SOLAR PANEL|SOLAR ARRAY|SOLAR PV|SOLAR SYSTEM|SOLAR ELECTRIC|SOLAR ENERGY"
     r"|SOLAR MODULE|SOLAR INSTALL|SOLAR ROOF|PHOTOVOLT|\bPV\b|ROOFTOP SOLAR"
