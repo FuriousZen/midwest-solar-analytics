@@ -72,6 +72,12 @@ class Attribution(BaseModel):
 
 class PredictionResponse(BaseModel):
     predicted_days: float = Field(..., description="Point prediction, in days.")
+    p10_days: float | None = Field(
+        default=None, description="Lower end of the 80% prediction interval."
+    )
+    p90_days: float | None = Field(
+        default=None, description="Upper end of the 80% prediction interval."
+    )
     predicted_completion_date: date
     horizon_days: int = Field(
         ..., description="Upper bound of the range this model was fitted on."

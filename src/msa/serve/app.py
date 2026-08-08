@@ -68,6 +68,12 @@ class ModelBundle:
         self.model.load_model(str(d / "model.json"))
         self.booster = self.model.get_booster()
         self.store = load_store(d / "feature_store.json")
+        self.quantiles = list(self.metadata.get("quantiles") or [])
+        qpath = d / "model_quantiles.json"
+        self.qmodel = None
+        if qpath.exists():
+            self.qmodel = xgb.XGBRegressor()
+            self.qmodel.load_model(str(qpath))
         self.log_target = bool(self.metadata.get("log1p_target"))
         self.categories = self.metadata["categories"]
         self.horizon = int(self.metadata["horizon_days"])
@@ -160,12 +166,23 @@ def create_app(segment: str = SEGMENT, root: Path = MODELS_DIR) -> FastAPI:
             preds = np.expm1(preds)
         preds = np.clip(preds, 0.0, bundle.horizon)
 
+        bounds = None
+        if bundle.qmodel is not None:
+            q = np.atleast_2d(bundle.qmodel.predict(X))
+            if q.shape[0] != len(X):
+                q = q.T
+            if bundle.log_target:
+                q = np.expm1(q)
+            bounds = np.sort(np.clip(q, 0.0, bundle.horizon), axis=1)
+
         out = []
         for i, item in enumerate(items):
             days = float(preds[i])
             out.append(
                 PredictionResponse(
                     predicted_days=round(days, 2),
+                    p10_days=round(float(bounds[i, 0]), 2) if bounds is not None else None,
+                    p90_days=round(float(bounds[i, -1]), 2) if bounds is not None else None,
                     predicted_completion_date=item.start_date
                     + timedelta(days=int(round(days))),
                     horizon_days=bundle.horizon,

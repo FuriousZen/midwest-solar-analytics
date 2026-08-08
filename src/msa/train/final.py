@@ -73,11 +73,63 @@ def load_best_params(segment: str) -> tuple[dict, bool, int | None]:
     return params, log_target, trial
 
 
+#: Interval endpoints published alongside the point prediction.
+QUANTILES = (0.1, 0.5, 0.9)
+
+
 def fit_final(ds: Dataset, params: dict, log_target: bool):
     model = make_model(params)
     y = np.log1p(ds.y_train) if log_target else ds.y_train
     model.fit(ds.X_train, y, verbose=False)
     return model
+
+
+def fit_quantiles(ds: Dataset, params: dict, log_target: bool):
+    """Companion multi-quantile model giving an 80% prediction interval.
+
+    A point estimate is close to useless on a target whose IQR spans months, so
+    the service publishes p10/p50/p90 as well. XGBoost 3.x fits all three in one
+    booster via ``objective="reg:quantileerror"`` with a vector
+    ``quantile_alpha`` (verified empirically against 3.4.0 -- it is accepted
+    through ``**kwargs`` and is absent from ``get_params()``).
+
+    The tuned tree-shape / regularisation hyper-parameters are reused; only the
+    objective changes. Quantiles are invariant under the monotone ``expm1``
+    back-transform, so a log-target model needs no correction.
+    """
+    from xgboost import XGBRegressor
+
+    shape = {
+        k: v
+        for k, v in params.items()
+        if k not in ("objective", "huber_slope", "eval_metric")
+    }
+    model = XGBRegressor(
+        objective="reg:quantileerror",
+        quantile_alpha=np.array(QUANTILES),
+        enable_categorical=True,
+        tree_method="hist",
+        random_state=RANDOM_SEED,
+        n_jobs=-1,
+        verbosity=0,
+        **shape,
+    )
+    y = np.log1p(ds.y_train) if log_target else ds.y_train
+    model.fit(ds.X_train, y, verbose=False)
+    return model
+
+
+def predict_quantiles(model, X: pd.DataFrame, log_target: bool) -> np.ndarray:
+    """Return an ``(n, len(QUANTILES))`` array in days, sorted per row."""
+    pred = np.atleast_2d(model.predict(X))
+    if pred.shape[0] != len(X):
+        pred = pred.T
+    if log_target:
+        pred = np.expm1(pred)
+    pred = np.clip(pred, 0.0, None)
+    # crossing quantiles are possible with independent pinball losses; enforce
+    # monotonicity so the published interval is always well formed
+    return np.sort(pred, axis=1)
 
 
 def predict(model, X: pd.DataFrame, log_target: bool) -> np.ndarray:
@@ -110,6 +162,7 @@ def build_metadata(ds: Dataset, params: dict, log_target: bool, metrics: dict) -
         "seed": RANDOM_SEED,
         "metrics": metrics,
         "train_median_days": float(ds.y_train.median()),
+        "quantiles": list(QUANTILES),
     }
 
 
@@ -128,6 +181,18 @@ def run(segment: str, log_to_mlflow: bool = True) -> dict:
     test_pred = predict(model, ds.X_test, log_target)
     test = regression_metrics(ds.y_test, test_pred, prefix="test_")
 
+    qmodel = fit_quantiles(ds, params, log_target)
+    q_test = predict_quantiles(qmodel, ds.X_test, log_target)
+    lo, mid, hi = q_test[:, 0], q_test[:, 1], q_test[:, 2]
+    covered = (ds.y_test.to_numpy() >= lo) & (ds.y_test.to_numpy() <= hi)
+    interval = {
+        "interval_nominal_coverage": QUANTILES[2] - QUANTILES[0],
+        "interval_empirical_coverage_test": float(covered.mean()),
+        "interval_median_width_days": float(np.median(hi - lo)),
+        "interval_mean_width_days": float(np.mean(hi - lo)),
+        "quantile_median_test_mae": float(np.mean(np.abs(ds.y_test - mid))),
+    }
+
     # a naive reference on the same holdout
     naive = np.full(ds.n_test, float(ds.y_train.median()))
     naive_test = regression_metrics(ds.y_test, naive, prefix="naive_test_")
@@ -136,6 +201,7 @@ def run(segment: str, log_to_mlflow: bool = True) -> dict:
         **tuned_cv,
         **test,
         **naive_test,
+        **interval,
         "baseline_xgb_default_cv_mae": base_cv["cv_mae"],
         "baseline_xgb_default_cv_r2": base_cv["cv_r2"],
         "baseline_xgb_default_cv_rmse": base_cv["cv_rmse"],
@@ -153,6 +219,7 @@ def run(segment: str, log_to_mlflow: bool = True) -> dict:
 
     md = model_dir(segment)
     model.save_model(str(md / "model.json"))
+    qmodel.save_model(str(md / "model_quantiles.json"))
 
     # snapshot the context features the API cannot recompute from a request
     from msa.features.build import clean
@@ -173,6 +240,9 @@ def run(segment: str, log_to_mlflow: bool = True) -> dict:
             "start_date": ds.meta_test["start_date"],
             "y_true": ds.y_test,
             "y_pred": test_pred,
+            "y_p10": lo,
+            "y_p50": mid,
+            "y_p90": hi,
         }
     ).to_csv(rd / "test_predictions.csv", index=False)
     pd.DataFrame({"y_true": ds.y_train, "y_oof": tuned_oof}).to_csv(
@@ -211,6 +281,12 @@ def run(segment: str, log_to_mlflow: bool = True) -> dict:
             mlflow.log_artifact(str(md / "metadata.json"))
             mlflow.log_artifact(str(rd / "final_metrics.json"))
 
+    LOG.info(
+        "[%s] 80%% interval covers %.1f%% of the holdout, median width %.0f days",
+        segment,
+        interval["interval_empirical_coverage_test"] * 100,
+        interval["interval_median_width_days"],
+    )
     LOG.info(
         "[%s] tuned cv_mae=%.3f cv_r2=%.4f | test_mae=%.3f test_r2=%.4f | "
         "vs stock XGBoost: %.1f%% lower CV MAE",

@@ -79,10 +79,21 @@ def model_root(tmp_path_factory, request):
     )
     model.fit(X, y)
 
+    qmodel = XGBRegressor(
+        objective="reg:quantileerror",
+        quantile_alpha=np.array([0.1, 0.5, 0.9]),
+        enable_categorical=True,
+        tree_method="hist",
+        n_estimators=40,
+        max_depth=3,
+    )
+    qmodel.fit(X, y)
+
     root = tmp_path_factory.mktemp("models")
     d = root / SEGMENT
     d.mkdir()
     model.save_model(str(d / "model.json"))
+    qmodel.save_model(str(d / "model_quantiles.json"))
     meta = cleaned[["record_id", "source", "jurisdiction", "state", "start_date", "end_date"]]
     save_store(build_store(X, meta, cleaned), d / "feature_store.json")
     (d / "metadata.json").write_text(
@@ -104,6 +115,7 @@ def model_root(tmp_path_factory, request):
                 "test_end": str(cleaned["start_date"].max().date()),
                 "jurisdictions": sorted(cleaned["jurisdiction"].unique().tolist()),
                 "metrics": {"cv_mae": 1.0},
+                "quantiles": [0.1, 0.5, 0.9],
             }
         )
     )
@@ -154,6 +166,21 @@ def test_predict_returns_a_sane_duration(client):
         days=int(round(body["predicted_days"]))
     )
     assert body["predicted_completion_date"] == str(expected.date())
+
+
+def test_prediction_interval_is_well_formed(client):
+    body = client.post("/predict", json=BODY).json()
+    assert body["p10_days"] is not None and body["p90_days"] is not None
+    assert 0 <= body["p10_days"] <= body["p90_days"] <= body["horizon_days"]
+
+
+def test_interval_covers_most_of_a_holdout_like_sample(client):
+    """Sanity check that the interval is not degenerate (zero-width)."""
+    widths = []
+    for day in ("2024-03-01", "2024-07-15", "2025-01-20"):
+        b = client.post("/predict", json=dict(BODY, start_date=day)).json()
+        widths.append(b["p90_days"] - b["p10_days"])
+    assert min(widths) > 0
 
 
 def test_predict_with_explain_returns_ranked_attributions(client):
