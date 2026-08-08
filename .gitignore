@@ -14,6 +14,3 @@ data/processed/
 .ruff_cache/
 *.egg-info/
 models/
-reports/*.html
-reports/*.png
-!reports/.gitkeep

@@ -25,6 +25,7 @@ import pandas as pd
 
 from msa.config import CANONICAL_COLUMNS, RAW_DIR
 from msa.ingest import socrata
+from msa.ingest.text import NON_PV_RE, PV_RE, normalize_contractor
 
 LOG = logging.getLogger(__name__)
 
@@ -79,14 +80,6 @@ _RE_ROOF_TYPE = re.compile(r"ROOF TYPE:\s*([A-Z\-]+)")
 _RE_BATTERY = re.compile(r"BATTER|ENERGY STORAGE|\bESS\b")
 _RE_GROUND = re.compile(r"GROUND[- ]MOUNT|GROUND MOUNTED")
 
-# Phrases that mean "not a PV installation" even though 'SOLAR' appears.
-_NON_PV = re.compile(
-    r"SOLARIUM"
-    r"|SOLAR WATER HEAT|SOLAR HOT WATER|SOLAR THERMAL"
-    r"|SOLAR TUBE|SOLATUBE|SOLAR SCREEN|SOLAR SHADE|SOLAR FILM|SOLAR CONTROL"
-)
-# Phrases that confirm it *is* PV.
-_IS_PV = re.compile(r"SOLAR PANEL|PHOTOVOLTAIC|\bPV\b|SOLAR ARRAY|SOLAR SYSTEM|SOLAR ENERGY")
 
 
 def _parse_float(series: pd.Series, pattern: re.Pattern[str]) -> pd.Series:
@@ -106,6 +99,18 @@ def _first_contact_of(df: pd.DataFrame, wanted: tuple[str, ...]) -> pd.Series:
     return out
 
 
+def _contact_type_matrix(df: pd.DataFrame) -> pd.DataFrame:
+    cols = [f"contact_{i}_type" for i in range(1, 16) if f"contact_{i}_type" in df]
+    return df[cols].apply(lambda s: s.astype("string").str.upper().str.strip())
+
+
+def _any_type(types: pd.DataFrame, wanted: tuple[str, ...]) -> pd.Series:
+    hit = pd.Series(False, index=types.index)
+    for c in types.columns:
+        hit |= types[c].isin(wanted).fillna(False)
+    return hit.astype(int)
+
+
 def _first_owner_zip(df: pd.DataFrame) -> pd.Series:
     out = pd.Series(np.nan, index=df.index, dtype=object)
     for i in range(1, 16):
@@ -118,25 +123,11 @@ def _first_owner_zip(df: pd.DataFrame) -> pd.Series:
     return out
 
 
-def normalize_contractor(name: object) -> object:
-    """Upper-case and strip common corporate suffixes/punctuation."""
-    if not isinstance(name, str) or not name.strip():
-        return np.nan
-    s = re.sub(r"[^A-Z0-9 ]+", " ", name.upper())
-    s = re.sub(
-        r"\b(LLC|L L C|INC|INCORPORATED|CO|CORP|CORPORATION|LTD|LP|LLP|COMPANY)\b",
-        " ",
-        s,
-    )
-    s = re.sub(r"\s+", " ", s).strip()
-    return s or np.nan
-
-
 def is_pv_description(desc: pd.Series, work_type: pd.Series) -> pd.Series:
     """Boolean mask selecting genuine PV jobs."""
     d = desc.fillna("").str.upper()
     tagged = work_type.fillna("") == SOLAR_WORK_TYPE
-    return (tagged | d.str.contains(_IS_PV)) & ~d.str.contains(_NON_PV)
+    return (tagged | d.str.contains(PV_RE)) & ~d.str.contains(NON_PV_RE)
 
 
 def fetch_raw(refresh: bool = False) -> pd.DataFrame:
@@ -188,23 +179,31 @@ def to_canonical(raw: pd.DataFrame) -> pd.DataFrame:
     ec = _first_contact_of(df, ("ELECTRICAL CONTRACTOR", "CONTRACTOR-ELECTRICAL"))
     contractor = gc.fillna(ec).map(normalize_contractor)
 
+    types = _contact_type_matrix(df)
+    n_parties = types.notna().sum(axis=1)
+    has_expeditor = _any_type(types, ("EXPEDITOR",))
+    has_engineer = _any_type(types, ("STRUCTURAL ENGINEER", "ENGINEER"))
+    has_design_pro = _any_type(
+        types, ("REGISTERED DESIGN PROFESSIONAL", "ARCHITECT")
+    )
+
     out = pd.DataFrame(
         {
             "record_id": SOURCE_KEY + ":" + df["id"].astype(str),
             "source": SOURCE_KEY,
             "jurisdiction": "Chicago",
             "state": "IL",
-            "start_date": start,
-            "end_date": end,
-            "timeline_days": (end - start).dt.days,
+            "application_date": start,
+            "issue_date": end,
+            # Chicago publishes no completion / final-inspection date, so this
+            # source contributes only to the application_to_issue segment.
+            "completion_date": pd.NaT,
             "system_size_kw": size,
             "reported_cost_usd": pd.to_numeric(df["reported_cost"], errors="coerce"),
             "permit_fee_usd": pd.to_numeric(df["total_fee"], errors="coerce"),
-            "sector": np.where(
-                df["permit_type"].fillna("").str.contains("NEW CONSTRUCTION"),
-                "new_construction",
-                "existing_building",
-            ),
+            # Chicago publishes no occupancy class; new-construction vs
+            # alteration is captured by permit_class instead.
+            "sector": "unknown",
             "review_track": df["review_type"].fillna("UNKNOWN").str.title(),
             "contractor": contractor,
             "zip_code": _first_owner_zip(df).astype("string").str.slice(0, 5),
@@ -213,6 +212,23 @@ def to_canonical(raw: pd.DataFrame) -> pd.DataFrame:
             "mount_type": mount,
             "roof_type": roof_type,
             "battery": desc.str.contains(_RE_BATTERY).astype(int),
+            "permit_class": df["permit_type"].astype("string").str.strip(),
+            "district": "ward-" + df["ward"].astype("string").str.replace(
+                r"\.0$", "", regex=True
+            ),
+            "building_fee_usd": pd.to_numeric(
+                df["building_fee_subtotal"], errors="coerce"
+            ),
+            "zoning_fee_usd": pd.to_numeric(df["zoning_fee_subtotal"], errors="coerce"),
+            "other_fee_usd": pd.to_numeric(df["other_fee_subtotal"], errors="coerce"),
+            "n_parties": n_parties.astype(float),
+            "has_expeditor": has_expeditor,
+            "has_engineer": has_engineer,
+            "has_design_professional": has_design_pro,
+            "description_length": df["work_description"]
+            .astype("string")
+            .str.len()
+            .astype("Float64"),
         }
     )
     return out[list(CANONICAL_COLUMNS)]
