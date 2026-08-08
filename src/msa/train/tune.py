@@ -59,9 +59,15 @@ def suggest_params(trial: optuna.Trial) -> dict:
     grow_policy = trial.suggest_categorical("grow_policy", ["depthwise", "lossguide"])
     params: dict = {
         "objective": trial.suggest_categorical("objective", list(OBJECTIVES)),
-        "n_estimators": trial.suggest_int("n_estimators", 200, 2000, step=50),
+        # Upper bounds chosen so the search spends its budget where the optimum
+        # actually lives. On ~8-17k rows with a learning rate that can go as low
+        # as 0.005, 1200 trees is already deep into diminishing returns, and
+        # depth > 10 is pure memorisation -- every trial that reached depth 11-12
+        # in an exploratory run scored worse than the incumbent while costing
+        # 3-6x the fit time.
+        "n_estimators": trial.suggest_int("n_estimators", 200, 1200, step=50),
         "learning_rate": trial.suggest_float("learning_rate", 5e-3, 0.3, log=True),
-        "max_depth": trial.suggest_int("max_depth", 2, 12),
+        "max_depth": trial.suggest_int("max_depth", 2, 10),
         "min_child_weight": trial.suggest_float(
             "min_child_weight", 0.5, 60.0, log=True
         ),
