@@ -349,16 +349,21 @@ def _rolling_application_counts(df: pd.DataFrame) -> pd.DataFrame:
     A proxy for reviewer workload/backlog. Uses only ``start_date``, which is
     observable at prediction time for every record involved.
     """
-    out = pd.DataFrame(index=df.index, dtype=float)
-    for window, name in ((30, "30d"), (90, "90d"), (365, "365d")):
-        col = f"jurisdiction_apps_prev_{name}"
-        out[col] = np.nan
-        for _, idx in df.groupby(_QUEUE_KEY, sort=False).groups.items():
-            sub = df.loc[idx, ["start_date"]].copy()
-            ones = pd.Series(1.0, index=pd.DatetimeIndex(sub["start_date"]))
-            # inclusive rolling count minus self => strictly-prior count
-            rolled = ones.rolling(f"{window}D").sum().to_numpy() - 1.0
-            out.loc[idx, col] = rolled
+    cols = [f"jurisdiction_apps_prev_{n}" for n in ("30d", "90d", "365d")]
+    out = pd.DataFrame(np.nan, index=df.index, columns=cols, dtype=float)
+
+    for _, idx in df.groupby(_QUEUE_KEY, sort=False).groups.items():
+        t = df.loc[idx, "start_date"].to_numpy("datetime64[ns]")
+        starts = np.sort(t)
+        for window, name in ((30, "30d"), (90, "90d"), (365, "365d")):
+            # `side="left"` on both ends counts applications filed STRICTLY
+            # before t. Counting same-day siblings would mean the feature
+            # depended on filings that happened later the same calendar day --
+            # a (small) look-ahead, since these registers are day-resolution and
+            # give no intra-day ordering.
+            hi = np.searchsorted(starts, t, side="left")
+            lo = np.searchsorted(starts, t - np.timedelta64(window, "D"), side="left")
+            out.loc[idx, f"jurisdiction_apps_prev_{name}"] = (hi - lo).astype(float)
     return out
 
 

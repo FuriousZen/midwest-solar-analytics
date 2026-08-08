@@ -146,6 +146,23 @@ def test_open_permit_count_is_observable_at_start_date(synthetic_canonical):
             assert row["jurisdiction_open_permits"] == expected
 
 
+def test_jurisdiction_application_counts_are_strictly_prior(synthetic_canonical):
+    """Same-day siblings must not be counted: they are not observable at filing."""
+    df = clean(synthetic_canonical, segment="permit_to_completion")
+    X, _ = build_features(df)
+    joined = pd.concat(
+        [df.reset_index(drop=True), X[["jurisdiction_apps_prev_30d"]]], axis=1
+    )
+    for _, sub in joined.groupby("jurisdiction"):
+        for i in range(0, len(sub), 13):
+            row = sub.iloc[i]
+            expected = (
+                (sub["start_date"] < row["start_date"])
+                & (sub["start_date"] >= row["start_date"] - pd.Timedelta(days=30))
+            ).sum()
+            assert row["jurisdiction_apps_prev_30d"] == expected
+
+
 def test_shuffling_the_target_destroys_signal(synthetic_canonical):
     """A crude but decisive leakage check.
 
