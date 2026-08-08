@@ -37,7 +37,7 @@ a flattering R² driven entirely by which milestone pair a row belongs to.
 git clone <this repo> && cd midwest-solar-analytics
 make venv                       # .venv + pinned deps + editable install
 make data                       # download & assemble the public corpus (~1 min)
-make test                       # 47 tests, offline
+make test                       # 49 tests, offline
 TRIALS=20 make pipeline         # smoke run of everything, ~10 min
 ```
 
@@ -128,7 +128,7 @@ Key design decisions, with the evidence behind them, are in
 * **Every feature must be computable on the day the clock starts.** Contractor
   history is an expanding mean over *strictly earlier* jobs; jurisdiction
   turnaround uses only permits *already closed*; the open-permit backlog uses
-  only what is observable at time *t*. Four tests enforce this, including one
+  only what is observable at time *t*. Five tests enforce this, including one
   that shuffles the target and requires R² < 0.05.
 * **Absolute time indices are excluded.** `start_year` and days-since-start let
   the booster memorise each period's level: measured effect on the

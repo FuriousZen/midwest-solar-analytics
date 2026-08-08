@@ -36,13 +36,14 @@ That rule is what makes several of the strongest features legitimate:
 * Tracking the Sun context — as-of joins over utility records installed
   strictly before `start_date`.
 
-Four tests enforce this rather than trusting the reasoning:
+Five tests enforce this rather than trusting the reasoning:
 
 | Test | What it proves |
 |---|---|
 | `test_contractor_history_excludes_the_current_row` | a contractor's first job has `NaN` history, and every later row's prior mean equals the mean of strictly earlier targets |
 | `test_jurisdiction_recent_stats_use_only_already_finished_jobs` | the 60-day window is recomputed by brute force and must match exactly |
 | `test_open_permit_count_is_observable_at_start_date` | the open-permit count is recomputed by brute force |
+| `test_jurisdiction_application_counts_are_strictly_prior` | same-day siblings are excluded from the trailing-window counts — these registers are day-resolution and give no intra-day ordering, so counting them would be a look-ahead |
 | `test_shuffling_the_target_destroys_signal` | with a permuted target the model must score R² < 0.05 — if any feature encoded the row's own target it would not |
 
 **This caught a real bug.** `_contractor_features` originally used
