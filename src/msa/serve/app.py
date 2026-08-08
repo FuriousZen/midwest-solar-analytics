@@ -69,6 +69,7 @@ class ModelBundle:
         self.booster = self.model.get_booster()
         self.store = load_store(d / "feature_store.json")
         self.quantiles = list(self.metadata.get("quantiles") or [])
+        self.conformal_delta = float(self.metadata.get("conformal_delta_days") or 0.0)
         qpath = d / "model_quantiles.json"
         self.qmodel = None
         if qpath.exists():
@@ -173,7 +174,11 @@ def create_app(segment: str = SEGMENT, root: Path = MODELS_DIR) -> FastAPI:
                 q = q.T
             if bundle.log_target:
                 q = np.expm1(q)
-            bounds = np.sort(np.clip(q, 0.0, bundle.horizon), axis=1)
+            q = np.sort(q, axis=1)
+            # split-conformal widening estimated during training
+            q[:, 0] -= bundle.conformal_delta
+            q[:, -1] += bundle.conformal_delta
+            bounds = np.clip(q, 0.0, bundle.horizon)
 
         out = []
         for i, item in enumerate(items):

@@ -164,3 +164,46 @@ def test_shuffling_the_target_destroys_signal(synthetic_canonical):
     )
     scores = cross_val_score(model, X, y_shuffled, cv=3, scoring="r2")
     assert scores.mean() < 0.05, f"leakage suspected: R2={scores.mean():.3f}"
+
+
+# --------------------------------------------------------------------------
+# conformal calibration of the prediction interval
+# --------------------------------------------------------------------------
+
+
+def test_conformal_delta_lifts_coverage_towards_nominal(synthetic_canonical):
+    """CQR must move empirical coverage towards the nominal 80%, not away."""
+    from msa.train.data import Dataset
+    from msa.train.final import (
+        QUANTILES,
+        calibrate_conformal,
+        fit_quantiles,
+        predict_quantiles,
+    )
+
+    df = clean(synthetic_canonical, segment="permit_to_completion")
+    X, y = build_features(df)
+    cut = int(len(X) * 0.75)
+    ds = Dataset(
+        X_train=X.iloc[:cut].reset_index(drop=True),
+        y_train=y.iloc[:cut].reset_index(drop=True),
+        X_test=X.iloc[cut:].reset_index(drop=True),
+        y_test=y.iloc[cut:].reset_index(drop=True),
+        meta_train=df.iloc[:cut].reset_index(drop=True),
+        meta_test=df.iloc[cut:].reset_index(drop=True),
+        split_date=df["start_date"].iloc[cut],
+        categories={c: list(map(str, X[c].cat.categories)) for c in CATEGORICAL_FEATURES},
+        segment="permit_to_completion",
+    )
+    params = {"n_estimators": 60, "max_depth": 3}
+    delta = calibrate_conformal(ds, params, log_target=False)
+    assert np.isfinite(delta)
+
+    q = predict_quantiles(fit_quantiles(ds, params, False), ds.X_test, False)
+    truth = ds.y_test.to_numpy()
+    raw = ((truth >= q[:, 0]) & (truth <= q[:, 2])).mean()
+    cal = (
+        (truth >= np.clip(q[:, 0] - delta, 0, None)) & (truth <= q[:, 2] + delta)
+    ).mean()
+    nominal = QUANTILES[2] - QUANTILES[0]
+    assert abs(cal - nominal) <= abs(raw - nominal) + 1e-9

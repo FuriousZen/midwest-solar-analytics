@@ -132,6 +132,62 @@ def predict_quantiles(model, X: pd.DataFrame, log_target: bool) -> np.ndarray:
     return np.sort(pred, axis=1)
 
 
+#: Fraction of the (chronologically ordered) training window reserved for
+#: conformal calibration. Never overlaps the holdout.
+CALIBRATION_FRACTION = 0.15
+
+
+def calibrate_conformal(ds: Dataset, params: dict, log_target: bool) -> float:
+    """Split-conformal (CQR) widening for the quantile interval.
+
+    Pinball-loss quantiles are not calibrated out of the box -- on this data the
+    nominal 80% interval empirically covered ~64% of the holdout. Conformalised
+    Quantile Regression (Romano, Patterson & Candes, 2019) fixes that with a
+    single additive correction estimated on held-out-from-fit data:
+
+        s_i = max(lo_i - y_i,  y_i - hi_i)         # conformity score
+        delta = the ceil((n+1)(1-alpha))/n empirical quantile of s
+
+    The interval [lo - delta, hi + delta] then has finite-sample coverage of at
+    least 1 - alpha, under exchangeability.
+
+    The calibration slice is the **most recent 15% of the training window** --
+    chronological, so it never touches the holdout and never lets future
+    information into the fit.
+    """
+    n = len(ds.X_train)
+    cut = int(n * (1.0 - CALIBRATION_FRACTION))
+    if cut < 50 or n - cut < 50:
+        LOG.warning("training window too small to conformalise; delta = 0")
+        return 0.0
+
+    fit_ds = Dataset(
+        X_train=ds.X_train.iloc[:cut],
+        y_train=ds.y_train.iloc[:cut],
+        X_test=ds.X_train.iloc[cut:],
+        y_test=ds.y_train.iloc[cut:],
+        meta_train=ds.meta_train.iloc[:cut],
+        meta_test=ds.meta_train.iloc[cut:],
+        split_date=ds.split_date,
+        categories=ds.categories,
+        segment=ds.segment,
+    )
+    model = fit_quantiles(fit_ds, params, log_target)
+    q = predict_quantiles(model, fit_ds.X_test, log_target)
+    y = fit_ds.y_test.to_numpy()
+    scores = np.maximum(q[:, 0] - y, y - q[:, 2])
+    alpha = 1.0 - (QUANTILES[2] - QUANTILES[0])
+    m = len(scores)
+    level = min(np.ceil((m + 1) * (1 - alpha)) / m, 1.0)
+    delta = float(np.quantile(scores, level, method="higher"))
+    LOG.info(
+        "conformal calibration on %d held-out training rows: delta = %+.1f days",
+        m,
+        delta,
+    )
+    return delta
+
+
 def predict(model, X: pd.DataFrame, log_target: bool) -> np.ndarray:
     pred = model.predict(X)
     if log_target:
@@ -163,6 +219,10 @@ def build_metadata(ds: Dataset, params: dict, log_target: bool, metrics: dict) -
         "metrics": metrics,
         "train_median_days": float(ds.y_train.median()),
         "quantiles": list(QUANTILES),
+        "conformal_delta_days": float(metrics.get("conformal_delta_days", 0.0)),
+        "interval_empirical_coverage_test": metrics.get(
+            "interval_empirical_coverage_test"
+        ),
     }
 
 
@@ -181,13 +241,22 @@ def run(segment: str, log_to_mlflow: bool = True) -> dict:
     test_pred = predict(model, ds.X_test, log_target)
     test = regression_metrics(ds.y_test, test_pred, prefix="test_")
 
+    conformal_delta = calibrate_conformal(ds, params, log_target)
     qmodel = fit_quantiles(ds, params, log_target)
     q_test = predict_quantiles(qmodel, ds.X_test, log_target)
-    lo, mid, hi = q_test[:, 0], q_test[:, 1], q_test[:, 2]
-    covered = (ds.y_test.to_numpy() >= lo) & (ds.y_test.to_numpy() <= hi)
+    raw_lo, mid, raw_hi = q_test[:, 0], q_test[:, 1], q_test[:, 2]
+    lo = np.clip(raw_lo - conformal_delta, 0.0, None)
+    hi = raw_hi + conformal_delta
+    y_true = ds.y_test.to_numpy()
     interval = {
         "interval_nominal_coverage": QUANTILES[2] - QUANTILES[0],
-        "interval_empirical_coverage_test": float(covered.mean()),
+        "conformal_delta_days": float(conformal_delta),
+        "interval_empirical_coverage_test": float(
+            ((y_true >= lo) & (y_true <= hi)).mean()
+        ),
+        "interval_uncalibrated_coverage_test": float(
+            ((y_true >= raw_lo) & (y_true <= raw_hi)).mean()
+        ),
         "interval_median_width_days": float(np.median(hi - lo)),
         "interval_mean_width_days": float(np.mean(hi - lo)),
         "quantile_median_test_mae": float(np.mean(np.abs(ds.y_test - mid))),
