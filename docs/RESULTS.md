@@ -51,8 +51,8 @@ Train rows: **8,117**  ·  holdout rows: **2,045**  ·  5-fold CV, seed 20250201
 |---|---:|---:|---:|---:|---:|
 | `global_median` | 53.302 | 81.134 | -0.1216 | 47.118 | -0.1323 |
 | `group_median` | 47.618 | 72.595 | 0.1021 | 45.621 | -0.0297 |
-| `ridge` | 47.043 | 65.235 | 0.2749 | 48.615 | 0.0521 |
-| `xgb_default` | 43.406 | 63.408 | 0.3150 | 59.142 | -0.2814 |
+| `ridge` | 47.059 | 65.233 | 0.2750 | 48.628 | 0.0517 |
+| `xgb_default` | 43.419 | 63.600 | 0.3108 | 64.310 | -0.5201 |
 
 
 ### Optuna study
@@ -63,6 +63,11 @@ _optuna_study.json missing._
 ### Final tuned model
 
 _final_metrics.json missing._
+
+
+### Holdout accuracy by jurisdiction
+
+_holdout_by_jurisdiction.csv missing._
 
 
 ## Model B — permit review timeline (application → issue)
@@ -77,8 +82,8 @@ Train rows: **16,684**  ·  holdout rows: **4,194**  ·  5-fold CV, seed 2025020
 |---|---:|---:|---:|---:|---:|
 | `global_median` | 9.497 | 17.435 | -0.0652 | 10.043 | -0.1087 |
 | `group_median` | 7.862 | 15.082 | 0.2029 | 9.428 | 0.0840 |
-| `ridge` | 7.123 | 13.465 | 0.3647 | 8.344 | 0.3236 |
-| `xgb_default` | 6.124 | 12.732 | 0.4319 | 10.182 | 0.1537 |
+| `ridge` | 7.119 | 13.467 | 0.3645 | 8.333 | 0.3247 |
+| `xgb_default` | 6.114 | 12.678 | 0.4368 | 10.707 | 0.0817 |
 
 
 ### Optuna study
@@ -89,6 +94,11 @@ _optuna_study.json missing._
 ### Final tuned model
 
 _final_metrics.json missing._
+
+
+### Holdout accuracy by jurisdiction
+
+_holdout_by_jurisdiction.csv missing._
 
 
 ## MLflow tracking

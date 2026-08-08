@@ -61,6 +61,29 @@ make bench                      # latency distribution
 
 <!-- RESULTS_TABLE -->
 
+### Résumé claim vs measurement
+
+| claim | résumé says | measured | verdict |
+|---|---|---|---|
+| dataset size | 8,000+ historical installations | 29,425 permit records; 12,108 with an installation duration, 21,884 with a review duration | **MET** |
+
+
+### Headline metrics
+
+| | Model A — installation timeline | Model B — permit review |
+|---|---:|---:|
+| training rows | — | — |
+| 5-fold CV MAE (days) | — | — |
+| 5-fold CV RMSE (days) | — | — |
+| 5-fold CV R² | — | — |
+| chronological holdout MAE (days) | — | — |
+| chronological holdout R² | — | — |
+| improvement vs stock XGBoost (CV MAE) | — | — |
+| 80% interval coverage on holdout | — | — |
+
+Full tables, per-jurisdiction breakdowns, the Optuna study and the
+latency distribution: **[docs/RESULTS.md](docs/RESULTS.md)**.
+
 ---
 
 ## Data

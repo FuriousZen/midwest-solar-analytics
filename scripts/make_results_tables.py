@@ -322,6 +322,61 @@ def scorecard() -> str:
     return "\n".join(lines) + "\n"
 
 
+README_START = "<!-- RESULTS_TABLE -->"
+
+
+def readme_block() -> str:
+    """The headline block injected into README.md between the markers."""
+    parts = [
+        README_START,
+        "",
+        "### Résumé claim vs measurement",
+        "",
+        scorecard(),
+        "",
+        "### Headline metrics",
+        "",
+        "| | Model A — installation timeline | Model B — permit review |",
+        "|---|---:|---:|",
+    ]
+    a = _read(REPORTS_DIR / "permit_to_completion" / "final_metrics.json") or {}
+    b = _read(REPORTS_DIR / "application_to_issue" / "final_metrics.json") or {}
+
+    def row(label, key, nd=3, pct=False):
+        va, vb = a.get(key), b.get(key)
+        f = lambda v: ("—" if v is None else (f"{v:.{nd}f}" + ("%" if pct else "")))
+        parts.append(f"| {label} | {f(va)} | {f(vb)} |")
+
+    row("training rows", "n_train")
+    row("5-fold CV MAE (days)", "cv_mae", 2)
+    row("5-fold CV RMSE (days)", "cv_rmse", 2)
+    row("5-fold CV R²", "cv_r2", 4)
+    row("chronological holdout MAE (days)", "test_mae", 2)
+    row("chronological holdout R²", "test_r2", 4)
+    row("improvement vs stock XGBoost (CV MAE)", "improvement_vs_default_cv_mae_pct", 1, True)
+    row("80% interval coverage on holdout", "interval_empirical_coverage_test", 3)
+    parts += [
+        "",
+        "Full tables, per-jurisdiction breakdowns, the Optuna study and the",
+        "latency distribution: **[docs/RESULTS.md](docs/RESULTS.md)**.",
+        "",
+    ]
+    return "\n".join(parts)
+
+
+def inject_readme() -> None:
+    path = Path(__file__).resolve().parents[1] / "README.md"
+    text = path.read_text()
+    if README_START not in text:
+        print("README marker not found; skipping injection")
+        return
+    head, _, tail = text.partition(README_START)
+    # everything up to the next '---' separator belongs to the generated block
+    _, sep, rest = tail.partition("\n---\n")
+    path.write_text(head + readme_block() + "\n" + sep.lstrip("\n") + rest)
+    print(f"injected results block into {path}")
+
+
 def main() -> None:
     parts = [
         "# Measured results",
@@ -376,6 +431,7 @@ def main() -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(parts))
     print(f"wrote {out}")
+    inject_readme()
 
 
 if __name__ == "__main__":
