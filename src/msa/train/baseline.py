@@ -34,7 +34,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from xgboost import XGBRegressor
 
-from msa.config import RANDOM_SEED, REPORTS_DIR
+from msa.config import DEFAULT_SEGMENT, RANDOM_SEED, REPORTS_DIR, SEGMENTS
 from msa.features.build import CATEGORICAL_FEATURES, NUMERIC_FEATURES
 from msa.train.data import Dataset, load_dataset
 from msa.train.metrics import regression_metrics
@@ -43,7 +43,6 @@ from msa.train.tracking import init_mlflow
 LOG = logging.getLogger(__name__)
 
 N_SPLITS = 5
-RESULTS_PATH = REPORTS_DIR / "baseline_results.json"
 
 
 def make_cv(n_splits: int = N_SPLITS) -> KFold:
@@ -201,6 +200,7 @@ def evaluate_baselines(ds: Dataset, log_to_mlflow: bool = True) -> dict:
                 mlflow.set_tags(
                     {
                         "stage": "baseline",
+                        "segment": ds.segment,
                         "model_family": name,
                         "cv_folds": str(N_SPLITS),
                     }
@@ -208,6 +208,7 @@ def evaluate_baselines(ds: Dataset, log_to_mlflow: bool = True) -> dict:
                 mlflow.log_params(
                     {
                         "baseline": name,
+                        "segment": ds.segment,
                         "n_train": ds.n_train,
                         "n_test": ds.n_test,
                         "split_date": str(ds.split_date.date()),
@@ -221,15 +222,17 @@ def evaluate_baselines(ds: Dataset, log_to_mlflow: bool = True) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
+    ap.add_argument("--segment", default=DEFAULT_SEGMENT, choices=list(SEGMENTS))
     ap.add_argument("--no-mlflow", action="store_true")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
     if not args.no_mlflow:
         init_mlflow()
-    ds = load_dataset()
+    ds = load_dataset(segment=args.segment)
     results = evaluate_baselines(ds, log_to_mlflow=not args.no_mlflow)
     payload = {
+        "segment": args.segment,
         "n_train": ds.n_train,
         "n_test": ds.n_test,
         "split_date": str(ds.split_date.date()),
@@ -237,7 +240,9 @@ def main() -> None:
         "seed": RANDOM_SEED,
         "results": results,
     }
-    RESULTS_PATH.write_text(json.dumps(payload, indent=2))
+    out_dir = REPORTS_DIR / args.segment
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "baseline_results.json").write_text(json.dumps(payload, indent=2))
     print(json.dumps(payload, indent=2))
 
 

@@ -23,10 +23,15 @@ PROCESSED_DIR = DATA_DIR / "processed"
 MODELS_DIR = Path(os.environ.get("MSA_MODELS_DIR", REPO_ROOT / "models"))
 REPORTS_DIR = Path(os.environ.get("MSA_REPORTS_DIR", REPO_ROOT / "reports"))
 
-# MLflow tracking store. Kept inside the repo (gitignored); a summary export is
-# committed instead -- see scripts/export_mlflow_summary.py
+# MLflow tracking store. MLflow 3.x refuses the legacy ./mlruns file store, so
+# we use the SQLite backend it recommends. Both the DB and the artifact root
+# live inside the repo and are gitignored; a summary export is committed
+# instead -- see scripts/export_mlflow_summary.py
 MLFLOW_TRACKING_URI = os.environ.get(
-    "MLFLOW_TRACKING_URI", f"file://{REPO_ROOT / 'mlruns'}"
+    "MLFLOW_TRACKING_URI", f"sqlite:///{REPO_ROOT / 'mlflow.db'}"
+)
+MLFLOW_ARTIFACT_ROOT = os.environ.get(
+    "MLFLOW_ARTIFACT_ROOT", str(REPO_ROOT / "mlartifacts")
 )
 MLFLOW_EXPERIMENT = os.environ.get("MLFLOW_EXPERIMENT", "midwest-solar-timeline")
 

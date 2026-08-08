@@ -33,7 +33,7 @@ from optuna.samplers import TPESampler
 from sklearn.model_selection import KFold
 from xgboost import XGBRegressor
 
-from msa.config import RANDOM_SEED, REPORTS_DIR
+from msa.config import DEFAULT_SEGMENT, RANDOM_SEED, REPORTS_DIR, SEGMENTS
 from msa.train.baseline import N_SPLITS, make_cv
 from msa.train.data import Dataset, load_dataset
 from msa.train.metrics import improvement_pct, regression_metrics
@@ -41,9 +41,10 @@ from msa.train.tracking import init_mlflow
 
 LOG = logging.getLogger(__name__)
 
-STUDY_PATH = REPORTS_DIR / "optuna_study.json"
-BEST_PARAMS_PATH = REPORTS_DIR / "best_params.json"
-TRIALS_CSV = REPORTS_DIR / "optuna_trials.csv"
+def report_dir(segment: str):
+    d = REPORTS_DIR / segment
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 #: Objectives worth trying for a skewed, non-negative duration target.
 OBJECTIVES = ("reg:squarederror", "reg:absoluteerror", "reg:pseudohubererror")
@@ -146,6 +147,7 @@ def run_study(
                     {
                         "stage": "optuna",
                         "study": study_name,
+                        "segment": ds.segment,
                         "trial_number": str(trial.number),
                         "model_family": "xgboost",
                     }
@@ -169,22 +171,40 @@ def run_study(
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--trials", type=int, default=200)
+    ap.add_argument("--segment", default=DEFAULT_SEGMENT, choices=list(SEGMENTS))
     ap.add_argument("--no-mlflow", action="store_true")
     args = ap.parse_args()
+    rd = report_dir(args.segment)
+    study_path = rd / "optuna_study.json"
+    best_params_path = rd / "best_params.json"
+    trials_csv = rd / "optuna_trials.csv"
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
     optuna.logging.set_verbosity(optuna.logging.WARNING)
 
-    ds = load_dataset()
+    ds = load_dataset(segment=args.segment)
     parent = None
     if not args.no_mlflow:
         init_mlflow()
-        parent = mlflow.start_run(run_name=f"optuna-study-{args.trials}-trials")
-        mlflow.set_tags({"stage": "optuna-parent", "trials": str(args.trials)})
+        parent = mlflow.start_run(
+            run_name=f"optuna-study-{args.segment}-{args.trials}-trials"
+        )
+        mlflow.set_tags(
+            {
+                "stage": "optuna-parent",
+                "segment": args.segment,
+                "trials": str(args.trials),
+            }
+        )
 
     try:
         t0 = time.perf_counter()
-        study = run_study(ds, n_trials=args.trials, log_to_mlflow=not args.no_mlflow)
+        study = run_study(
+            ds,
+            n_trials=args.trials,
+            log_to_mlflow=not args.no_mlflow,
+            study_name=f"xgb-{args.segment}-tpe",
+        )
         wall = time.perf_counter() - t0
 
         # baseline reference: identical folds, stock hyper-parameters
@@ -195,6 +215,7 @@ def main() -> None:
 
         best = study.best_trial
         payload = {
+            "segment": args.segment,
             "study_name": study.study_name,
             "sampler": "TPESampler(multivariate=True, seed=%d)" % RANDOM_SEED,
             "n_trials": len(study.trials),
@@ -215,12 +236,18 @@ def main() -> None:
                 base["cv_rmse"], best.user_attrs.get("cv_rmse", float("nan"))
             ),
         }
-        STUDY_PATH.write_text(json.dumps(payload, indent=2, default=str))
-        BEST_PARAMS_PATH.write_text(json.dumps(best.params, indent=2))
-        study.trials_dataframe().to_csv(TRIALS_CSV, index=False)
+        study_path.write_text(json.dumps(payload, indent=2, default=str))
+        best_params_path.write_text(json.dumps(best.params, indent=2))
+        study.trials_dataframe().to_csv(trials_csv, index=False)
 
         if not args.no_mlflow:
-            mlflow.log_params({"n_trials": args.trials, "cv_splits": N_SPLITS})
+            mlflow.log_params(
+                {
+                    "n_trials": args.trials,
+                    "cv_splits": N_SPLITS,
+                    "segment": args.segment,
+                }
+            )
             mlflow.log_metrics(
                 {
                     "best_cv_mae": float(best.value),
@@ -232,8 +259,8 @@ def main() -> None:
                     "wall_seconds": wall,
                 }
             )
-            mlflow.log_artifact(str(STUDY_PATH))
-            mlflow.log_artifact(str(TRIALS_CSV))
+            mlflow.log_artifact(str(study_path))
+            mlflow.log_artifact(str(trials_csv))
         print(json.dumps(payload, indent=2, default=str))
     finally:
         if parent is not None:

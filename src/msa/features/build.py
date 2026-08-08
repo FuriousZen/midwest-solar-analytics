@@ -243,27 +243,29 @@ def _contractor_features(df: pd.DataFrame) -> pd.DataFrame:
     key = df["contractor"].fillna("__UNKNOWN__")
     known = key.ne("__UNKNOWN__")
 
-    grp = df.assign(_k=key).groupby("_k", sort=False)[TARGET]
-    prior_n = grp.cumcount()
-    prior_mean = grp.apply(lambda s: s.shift(1).expanding().mean()).reset_index(
-        level=0, drop=True
-    )
-    prior_median = grp.apply(lambda s: s.shift(1).expanding().median()).reset_index(
-        level=0, drop=True
-    )
+    work = df[[TARGET, "start_date"]].assign(_k=key.to_numpy())
+    grp = work.groupby("_k", sort=False)
 
-    out["contractor_prior_permits"] = np.where(known, prior_n, np.nan)
-    out["contractor_prior_mean_days"] = np.where(known, prior_mean, np.nan)
-    out["contractor_prior_median_days"] = np.where(known, prior_median, np.nan)
-    out["contractor_is_known"] = known.astype(int)
+    # NB: ``transform`` preserves the caller's row order. ``apply`` returns rows
+    # grouped by key, which silently misaligns when the result is written back
+    # positionally -- that produced a contractor's *own* target leaking into its
+    # first record. Covered by
+    # tests/test_features.py::test_contractor_history_excludes_the_current_row
+    prior_n = grp.cumcount().to_numpy()
+    prior_mean = grp[TARGET].transform(
+        lambda s: s.shift(1).expanding().mean()
+    ).to_numpy()
+    prior_median = grp[TARGET].transform(
+        lambda s: s.shift(1).expanding().median()
+    ).to_numpy()
+    gap = grp["start_date"].transform(lambda s: s.diff().dt.days).to_numpy()
 
-    gap = (
-        df.assign(_k=key)
-        .groupby("_k", sort=False)["start_date"]
-        .diff()
-        .dt.days
-    )
-    out["contractor_days_since_last_app"] = np.where(known, gap, np.nan)
+    k = known.to_numpy()
+    out["contractor_prior_permits"] = np.where(k, prior_n, np.nan)
+    out["contractor_prior_mean_days"] = np.where(k, prior_mean, np.nan)
+    out["contractor_prior_median_days"] = np.where(k, prior_median, np.nan)
+    out["contractor_is_known"] = k.astype(int)
+    out["contractor_days_since_last_app"] = np.where(k, gap, np.nan)
     return out
 
 
@@ -308,43 +310,36 @@ def _queue_features(df: pd.DataFrame) -> pd.DataFrame:
             - np.searchsorted(ends, window30, side="left")
         ).astype(float)
 
-        # rolling statistics over permits keyed by their ISSUE date
-        by_issue = sub.sort_values("end_date")
-        series = pd.Series(
-            by_issue[TARGET].to_numpy(dtype=float),
-            index=pd.DatetimeIndex(by_issue["end_date"]),
-        )
-        rolled = pd.DataFrame(
-            {
-                "jurisdiction_recent_mean_days_60d": series.rolling("60D").mean(),
-                "jurisdiction_recent_median_days_60d": series.rolling("60D").median(),
-                "jurisdiction_recent_p90_days_180d": series.rolling("180D").quantile(
-                    0.9
-                ),
-                "jurisdiction_recent_mean_days_365d": series.rolling("365D").mean(),
-            }
-        )
-        rolled = rolled.groupby(level=0).last().sort_index()
-        rolled["end_date"] = rolled.index
+        # Realised turnaround of jobs already *finished* before t, over an exact
+        # window [t - W, t). Order statistics need the slice itself, so the
+        # targets are sorted by completion date once and then sliced with
+        # searchsorted -- O(n log n) plus one pass per window.
+        order = np.argsort(sub["end_date"].to_numpy("datetime64[ns]"), kind="stable")
+        ends_sorted = sub["end_date"].to_numpy("datetime64[ns]")[order]
+        y_sorted = sub[TARGET].to_numpy(dtype=float)[order]
 
-        left = df.loc[idx, ["start_date"]].copy()
-        left["_row"] = np.arange(len(left))
-        left = left.sort_values("start_date")
-        merged = pd.merge_asof(
-            left,
-            rolled.reset_index(drop=True).sort_values("end_date"),
-            left_on="start_date",
-            right_on="end_date",
-            direction="backward",
-            allow_exact_matches=False,
-        ).sort_values("_row")
-        for c in (
-            "jurisdiction_recent_mean_days_60d",
-            "jurisdiction_recent_median_days_60d",
-            "jurisdiction_recent_p90_days_180d",
-            "jurisdiction_recent_mean_days_365d",
+        for window, stat, col in (
+            (60, "mean", "jurisdiction_recent_mean_days_60d"),
+            (60, "median", "jurisdiction_recent_median_days_60d"),
+            (180, "p90", "jurisdiction_recent_p90_days_180d"),
+            (365, "mean", "jurisdiction_recent_mean_days_365d"),
         ):
-            out.loc[idx, c] = merged[c].to_numpy()
+            lo = np.searchsorted(
+                ends_sorted, t - np.timedelta64(window, "D"), side="left"
+            )
+            hi = np.searchsorted(ends_sorted, t, side="left")
+            values = np.full(len(t), np.nan)
+            for i in range(len(t)):
+                if hi[i] <= lo[i]:
+                    continue
+                chunk = y_sorted[lo[i] : hi[i]]
+                if stat == "mean":
+                    values[i] = chunk.mean()
+                elif stat == "median":
+                    values[i] = np.median(chunk)
+                else:
+                    values[i] = np.percentile(chunk, 90)
+            out.loc[idx, col] = values
     return out
 
 
