@@ -127,9 +127,11 @@ def request_frame(items: list[PermitRequest], bundle: ModelBundle) -> pd.DataFra
     return as_model_frame(frame, bundle.categories)
 
 
-def _attributions(X: pd.DataFrame, row: int, bundle: ModelBundle) -> list[Attribution]:
-    values = bundle.explainer.shap_values(X)
-    v = np.asarray(values)[row]
+def _attributions(
+    X: pd.DataFrame, row: int, shap_values: np.ndarray
+) -> list[Attribution]:
+    """Top-|SHAP| drivers for one row of an already-computed attribution matrix."""
+    v = shap_values[row]
     order = np.argsort(-np.abs(v))[:TOP_ATTRIBUTIONS]
     out = []
     for j in order:
@@ -167,6 +169,12 @@ def create_app(segment: str = SEGMENT, root: Path = MODELS_DIR) -> FastAPI:
             preds = np.expm1(preds)
         preds = np.clip(preds, 0.0, bundle.horizon)
 
+        # TreeSHAP is computed once for the whole frame; calling it per row
+        # would make an explained batch quadratic in the batch size.
+        shap_values = (
+            np.asarray(bundle.explainer.shap_values(X)) if explain else None
+        )
+
         bounds = None
         if bundle.qmodel is not None:
             q = np.atleast_2d(bundle.qmodel.predict(X))
@@ -193,7 +201,9 @@ def create_app(segment: str = SEGMENT, root: Path = MODELS_DIR) -> FastAPI:
                     horizon_days=bundle.horizon,
                     segment=bundle.segment,
                     model_version=bundle.version,
-                    attributions=_attributions(X, i, bundle) if explain else None,
+                    attributions=(
+                        _attributions(X, i, shap_values) if explain else None
+                    ),
                 )
             )
         return out
