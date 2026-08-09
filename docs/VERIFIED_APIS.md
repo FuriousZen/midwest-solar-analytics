@@ -35,3 +35,20 @@ Reproduce the introspection checks with:
 | ArcGIS REST | `esriFieldTypeDate` returns **epoch milliseconds**; `esriFieldTypeDateOnly` returns an **ISO date string**. Detroit's BSEED layer uses DateOnly, Minneapolis uses Date — `msa.ingest.arcgis.parse_esri_date` handles both, and `tests/test_ingest.py` locks that behaviour in |
 | ArcGIS REST | truncation is signalled by `exceededTransferLimit`; page with `resultOffset`/`resultRecordCount` and an explicit `orderByFields` |
 | OEDI S3 (`oedi-data-lake`) | anonymous HTTPS listing works via `?list-type=2&prefix=...`; Tracking the Sun is Hive-partitioned `<edition>/state=XX/` |
+
+## Verified during the hardening pass
+
+Each of these was confirmed against the pinned version (and, where noted,
+against the official documentation) rather than recalled. `python -m
+scripts.verify_apis` asserts the mechanical ones on every run.
+
+| library | assumption | how it was verified | why it matters |
+|---|---|---|---|
+| `httpx` 0.28.1 | `ASGITransport` is **async-only**: it subclasses `AsyncBaseTransport` and has no `__enter__`, so it must be driven by `AsyncClient` | introspection + [transports docs](https://www.python-httpx.org/advanced/transports/) | pairing it with the sync `Client` raised `AttributeError` on **every** run of `msa.bench.latency` and `scripts.demo_predict`. Both are now async |
+| `xgboost` 3.4.0 | all prediction functions, including SHAP contributions, are thread-safe for `gbtree`/`dart` boosters as long as nothing mutates the model concurrently | [prediction docs](https://xgboost.readthedocs.io/en/stable/prediction.html) | the service shares one booster across the whole worker thread-pool with no lock. Nothing calls `set_params()` at request time, which is the documented way to break the guarantee |
+| `shap` 0.52.0 | `TreeExplainer.shap_values` on an XGBoost model delegates to `booster.predict(..., pred_contribs=True)` and does not mutate the explainer on that path | reading the installed `shap/explainers/_tree.py` | concurrent `?explain=true` is therefore safe; it is still capped at `MSA_MAX_CONCURRENT_EXPLAIN` to bound memory, not for correctness |
+| `pydantic` 2.13.4 | `allow_inf_nan` is available both on `ConfigDict` and per-`Field`; without it a JSON `Infinity` token passes a `ge=0` bound | [config docs](https://pydantic.dev/docs/validation/latest/api/pydantic/config/) + an executed check in `scripts/verify_apis.py` | `Infinity` flowed through `log1p` and `cost_per_kw` into a non-finite prediction |
+| `fastapi` 0.141.1 | `lifespan=` async context manager is the supported startup hook; `@app.exception_handler(Exception)` installs Starlette's `ServerErrorMiddleware` handler, which runs *outside* user middleware | [lifespan docs](https://fastapi.tiangolo.com/advanced/events/), [error docs](https://fastapi.tiangolo.com/tutorial/handling-errors/) | the request id is therefore read from `scope["state"]` in the 500 handler, because the context variable has already been reset by then |
+| `uvicorn` 0.52.1 | an exception raised inside the `lifespan` scope is interpreted as *"the app does not implement lifespan"* — uvicorn logs `ASGI 'lifespan' protocol appears unsupported` and **serves anyway**. The correct refusal is to send `{"type": "lifespan.startup.failed"}` | run against a real uvicorn process; `exit 3` and no socket bound | this is the difference between "refuses to start without a model" and "starts with no model and 500s every request" |
+| `mlflow` 3.15.1 | `mlflow.xgboost.log_model` produces a model that cannot be served: MLflow carries DataFrames as JSON, JSON has no categorical dtype, and the booster rejects the resulting `object` columns. MLflow only *warns* about this | reproduced in a real `final` run; fixed with a `pyfunc` wrapper and asserted by `tests/test_train_artifacts.py` | the registry was holding an unusable model on every previous run |
+| `optuna` 4.9.0 | `study.tell(trial_number, state=TrialState.FAIL)` retires a stale `RUNNING` trial left by a killed process | executed against `optuna.db` | one such trial was blocking a clean read of the study |

@@ -66,6 +66,13 @@ def main() -> int:
     sr = inspect.signature(mlflow.search_runs).parameters
     ok &= check("search_runs(experiment_names=...)", "experiment_names" in sr)
 
+    ok &= check(
+        "mlflow.pyfunc.log_model(python_model=, artifacts=)",
+        {"python_model", "artifacts"}
+        <= set(inspect.signature(mlflow.pyfunc.log_model).parameters),
+        "the servable flavour -- the xgboost one cannot round-trip categoricals",
+    )
+
     import shap
 
     print(f"\n== shap {shap.__version__} ==")
@@ -80,6 +87,47 @@ def main() -> int:
     print(f"\n== scikit-learn {sklearn.__version__} ==")
     kf = inspect.signature(KFold.__init__).parameters
     ok &= check("KFold(n_splits, shuffle, random_state)", {"n_splits", "shuffle", "random_state"} <= set(kf))
+
+    import httpx
+
+    print(f"\n== httpx {httpx.__version__} ==")
+    # This one is load-bearing: pairing ASGITransport with the *sync* Client
+    # raised AttributeError on every invocation of the latency benchmark and
+    # the demo script. Assert the asymmetry rather than remember it.
+    ok &= check(
+        "ASGITransport is async-only (AsyncBaseTransport, no __enter__)",
+        issubclass(httpx.ASGITransport, httpx.AsyncBaseTransport)
+        and not hasattr(httpx.ASGITransport, "__enter__"),
+        "must be driven by httpx.AsyncClient",
+    )
+    ok &= check(
+        "WSGITransport is the synchronous one",
+        issubclass(httpx.WSGITransport, httpx.BaseTransport),
+    )
+
+    import pydantic
+
+    print(f"\n== pydantic {pydantic.VERSION} ==")
+    ok &= check(
+        "ConfigDict supports extra / allow_inf_nan / str_max_length",
+        {"extra", "allow_inf_nan", "str_max_length"}
+        <= set(pydantic.ConfigDict.__annotations__),
+    )
+    ok &= check(
+        "Field(allow_inf_nan=...) is a per-field option",
+        "allow_inf_nan" in inspect.signature(pydantic.Field).parameters,
+        "without it, JSON Infinity passes a ge=0 bound",
+    )
+
+    class _InfCheck(pydantic.BaseModel):
+        v: float = pydantic.Field(ge=0, allow_inf_nan=False)
+
+    rejected = False
+    try:
+        _InfCheck(v=float("inf"))
+    except pydantic.ValidationError:
+        rejected = True
+    ok &= check("allow_inf_nan=False actually rejects +inf", rejected)
 
     print("\nALL CHECKS PASSED" if ok else "\nSOME CHECKS FAILED")
     return 0 if ok else 1
