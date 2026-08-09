@@ -15,8 +15,13 @@ class PermitRequest(BaseModel):
     consumes missing numerics natively rather than needing imputation.
     """
 
+    # Free-text fields are length-capped. They are only ever used as categorical
+    # lookup keys, so nothing legitimate needs more than a short string, and an
+    # uncapped string field on a public endpoint is a cheap memory-amplification
+    # vector when combined with the 1000-item batch endpoint.
     jurisdiction: str = Field(
         ...,
+        max_length=120,
         examples=["Chicago"],
         description="City whose register the permit sits in, e.g. 'Minneapolis'.",
     )
@@ -41,12 +46,15 @@ class PermitRequest(BaseModel):
         ),
     )
     other_fee_usd: float | None = Field(default=None, ge=0)
-    sector: str | None = Field(default=None, examples=["residential"])
-    review_track: str | None = Field(default=None, examples=["Express Permit Program"])
-    permit_class: str | None = None
-    district: str | None = None
+    sector: str | None = Field(default=None, max_length=60, examples=["residential"])
+    review_track: str | None = Field(
+        default=None, max_length=120, examples=["Express Permit Program"]
+    )
+    permit_class: str | None = Field(default=None, max_length=120)
+    district: str | None = Field(default=None, max_length=60)
     contractor: str | None = Field(
         default=None,
+        max_length=200,
         description=(
             "Installer / general contractor. Matched against the contractors seen "
             "in training to look up their historical turnaround."
@@ -55,8 +63,8 @@ class PermitRequest(BaseModel):
     zip_code: str | None = Field(default=None, max_length=10)
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
-    mount_type: str | None = Field(default=None, examples=["roof"])
-    roof_type: str | None = Field(default=None, examples=["pitched"])
+    mount_type: str | None = Field(default=None, max_length=40, examples=["roof"])
+    roof_type: str | None = Field(default=None, max_length=40, examples=["pitched"])
     battery: int | None = Field(default=None, ge=0, le=1)
     n_parties: float | None = Field(default=None, ge=0)
     has_expeditor: int | None = Field(default=None, ge=0, le=1)

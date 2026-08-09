@@ -282,3 +282,15 @@ def test_zoning_review_flag_is_derived_the_same_way_as_in_training(model_root):
     assert X["zoning_review_required"].tolist()[:2] == [1.0, 0.0]
     assert pd.isna(X["zoning_review_required"].iloc[2])
     assert X["zoning_fee_usd"].tolist()[:2] == [50.0, 0.0]
+
+
+def test_overlong_free_text_is_rejected(client):
+    """Uncapped string fields on a batch endpoint are a memory-amplifier."""
+    assert (
+        client.post("/predict", json=dict(BODY, jurisdiction="x" * 5000)).status_code
+        == 422
+    )
+    assert (
+        client.post("/predict", json=dict(BODY, contractor="y" * 5000)).status_code
+        == 422
+    )
