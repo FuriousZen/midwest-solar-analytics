@@ -336,7 +336,9 @@ artifact that produced it.
 range-capped, dates must be plausible, unknown fields are rejected
 (`extra="forbid"`), and `Infinity`/`NaN` — which Python's JSON parser accepts,
 and which sail straight through a `ge=0` bound — are rejected outright. Batches
-are capped at 1000 items and bodies at 4 MiB (413). Twenty-seven malformed
+are capped at 1000 items and bodies at 4 MiB (413) — enforced by counting
+bytes as they arrive, so a `Transfer-Encoding: chunked` upload that declares no
+length is bounded too. Twenty-seven malformed
 single payloads and seven malformed batch payloads are asserted to return 422,
 never 500.
 
@@ -358,9 +360,9 @@ arrive at once. Measured, in-process, 2000 requests per level:
 
 | concurrent requests | p50 | p95 | throughput |
 |---:|---:|---:|---:|
-| 1 | 11.6 ms | 13.0 ms | 84 req/s |
-| 8 | 83.8 ms | 126.0 ms | 92 req/s |
-| 32 | 319.4 ms | 451.7 ms | 92 req/s |
+| 1 | 12.1 ms | 15.3 ms | 79 req/s |
+| 8 | 94.7 ms | 149.3 ms | 80 req/s |
+| 32 | 321.6 ms | 438.5 ms | 91 req/s |
 
 Throughput is flat from 8 concurrent onward: the service is CPU-bound in the
 booster, so extra concurrency buys queueing, not work. Scale by adding workers.
@@ -423,7 +425,8 @@ It reads **NOT MET** on five of nine rows, and those verdicts are correct.
   which is exactly the ambiguity the results table resolves by reporting the
   improvement against all four baselines rather than the flattering one.
 * **Dataset size, MLflow run count and p95 latency are met**, the last
-  comfortably: **12.97 ms** serial p95 against a < 50 ms claim.
+  comfortably — see the generated scorecard above for the measured p95, which
+  is roughly a third of the 50 ms budget.
 
 Would a full 200-trial budget change the verdicts? Model A's study spent 136
 trials to reach 11.4%; the remaining 64 would have to more than double that to
