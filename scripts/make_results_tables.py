@@ -237,31 +237,27 @@ def latency_section() -> str:
 
 
 def _latency_block(d: dict, mode: str) -> list[str]:
-    out: list[str] = []
-    if True:
-        s = d["single_request"]
+    s = d["single_request"]
+    out = [
+        f"**`{mode}` · `{d['segment']}`** — {s['n']:,} single-project requests, "
+        f"measured {d['measured_on']} on {d['host']['platform']}\n",
+        "| percentile | latency (ms) |",
+        "|---|---:|",
+        f"| p50 | {s['p50_ms']:.2f} |",
+        f"| p90 | {s['p90_ms']:.2f} |",
+        f"| **p95** | **{s['p95_ms']:.2f}** |",
+        f"| p99 | {s['p99_ms']:.2f} |",
+        f"| max | {s['max_ms']:.2f} |",
+        f"| mean | {s['mean_ms']:.2f} |",
+        "",
+    ]
+    if d.get("batch_request"):
+        b = d["batch_request"]
         out.append(
-            f"**`{mode}` · `{d['segment']}`** — {s['n']:,} single-project requests, "
-            f"measured {d['measured_on']} on {d['host']['platform']}\n"
+            f"Batch endpoint: {b['batch_size']} projects per call, "
+            f"p50 {b['p50_ms']:.1f} ms per call "
+            f"({b['per_item_p50_ms']:.3f} ms per project).\n"
         )
-        out += [
-            "| percentile | latency (ms) |",
-            "|---|---:|",
-            f"| p50 | {s['p50_ms']:.2f} |",
-            f"| p90 | {s['p90_ms']:.2f} |",
-            f"| **p95** | **{s['p95_ms']:.2f}** |",
-            f"| p99 | {s['p99_ms']:.2f} |",
-            f"| max | {s['max_ms']:.2f} |",
-            f"| mean | {s['mean_ms']:.2f} |",
-            "",
-        ]
-        if d.get("batch_request"):
-            b = d["batch_request"]
-            out.append(
-                f"Batch endpoint: {b['batch_size']} projects per call, "
-                f"p50 {b['p50_ms']:.1f} ms per call "
-                f"({b['per_item_p50_ms']:.3f} ms per project).\n"
-            )
     return out
 
 
