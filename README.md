@@ -86,44 +86,34 @@ make bench                      # latency distribution
 | claim | résumé says | measured | verdict |
 |---|---|---|---|
 | dataset size | 8,000+ historical installations | 29,425 permit records; 12,108 with an installation duration, 21,884 with a review duration | **MET** |
-| R² (model A, 5-fold CV) | 0.86 | not measured — run `make tune final SEGMENT=permit_to_completion` | **NOT MEASURED** |
-| MAE (model A, 5-fold CV) | 4.2 days | not measured — run `make tune final SEGMENT=permit_to_completion` | **NOT MEASURED** |
-| improvement over baseline (model A) | 23% | not measured — run `make tune final SEGMENT=permit_to_completion` | **NOT MEASURED** |
-| R² (model B, 5-fold CV) | 0.86 | not measured — run `make tune final SEGMENT=application_to_issue` | **NOT MEASURED** |
-| MAE (model B, 5-fold CV) | 4.2 days | not measured — run `make tune final SEGMENT=application_to_issue` | **NOT MEASURED** |
-| improvement over baseline (model B) | 23% | not measured — run `make tune final SEGMENT=application_to_issue` | **NOT MEASURED** |
-| MLflow runs | 60+ | 175 (156 optuna, 12 baseline, 4 final, 3 optuna-parent) | **MET** |
-| p95 inference latency | < 50 ms | 12.97 ms | **MET** |
+| R² (model A, 5-fold CV) | 0.86 | 0.3364 | **NOT MET** |
+| MAE (model A, 5-fold CV) | 4.2 days | 38.48 days | **NOT MET** |
+| improvement over baseline (model A) | 23% | 11.4% lower CV MAE vs stock XGBoost (vs the naive median baseline: 27.8%) | **NOT MET** |
+| R² (model B, 5-fold CV) | 0.86 | 0.3901 | **NOT MET** |
+| MAE (model B, 5-fold CV) | 4.2 days | 5.29 days | **NOT MET** |
+| improvement over baseline (model B) | 23% | 13.5% lower CV MAE vs stock XGBoost (vs the naive median baseline: 44.3%) | **NOT MET** |
+| MLflow runs | 60+ | 187 (156 optuna, 20 baseline, 6 final, 5 optuna-parent) | **MET** |
+| p95 inference latency | < 50 ms | 15.33 ms | **MET** |
 
 
 ### Headline metrics (tuned models)
 
-> **Not measured.** The 200-trial Optuna study was stopped before
-> completing, so no tuned model was fitted, no holdout was scored,
-> and there is no latency distribution or SHAP dashboard. Rather
-> than print placeholder numbers this section stays empty until
-> `./scripts/run_pipeline.sh` has produced the artifacts, at which
-> point `python -m scripts.make_results_tables` fills it in.
+The trial budget each model actually got is the first row, because
+every metric below is conditional on it. Neither study ran to 200
+trials: model A's was stopped at 136 and the final model was fitted
+from those; model B's was deliberately run short.
 
-What **is** measured is the baseline layer below — four models per
-segment on identical 5-fold splits, which is what the tuned model
-must be judged against.
-
-### Partial Optuna study (incomplete)
-
-#### `application_to_issue` — INCOMPLETE study, 20 of 200 trials logged
-
-> These are real logged trials from a study that was **stopped before
-> completing**. No final model was fitted from them and no holdout was
-> scored, so they are *not* the project's results — they are a partial
-> read on where a finished study would land.
-
-| | value |
-|---|---:|
-| trials logged | 20 of 200 |
-| best trial CV MAE (days) | 5.291 |
-| best trial CV R² | 0.3901 |
-
+| | Model A — installation timeline | Model B — permit review |
+|---|---:|---:|
+| Optuna trials completed | 136 | 20 |
+| training rows | 8,117 | 16,684 |
+| 5-fold CV MAE (days) | 38.48 | 5.29 |
+| 5-fold CV RMSE (days) | 62.41 | 13.19 |
+| 5-fold CV R² | 0.3364 | 0.3901 |
+| chronological holdout MAE (days) | 45.10 | 8.32 |
+| chronological holdout R² | 0.0730 | 0.2203 |
+| improvement vs stock XGBoost (CV MAE) | 11.4% | 13.5% |
+| 80% interval coverage on holdout | 0.908 | 0.888 |
 
 ### Measured baselines
 
@@ -135,6 +125,15 @@ must be judged against.
 | `group_median` | 47.618 | 0.1021 | 45.621 | -0.0297 |
 | `ridge` | 47.059 | 0.2750 | 48.628 | 0.0517 |
 | `xgb_default` | 43.419 | 0.3108 | 64.310 | -0.5201 |
+
+`application_to_issue` — 16,684 train / 4,194 holdout, 5-fold CV, seed 20250201
+
+| model | CV MAE (d) | CV R² | holdout MAE (d) | holdout R² |
+|---|---:|---:|---:|---:|
+| `global_median` | 9.497 | -0.0652 | 10.043 | -0.1087 |
+| `group_median` | 7.862 | 0.2029 | 9.428 | 0.0840 |
+| `ridge` | 7.119 | 0.3645 | 8.333 | 0.3247 |
+| `xgb_default` | 6.114 | 0.4368 | 10.707 | 0.0817 |
 
 Full tables, per-jurisdiction breakdowns, the Optuna study and the
 latency distribution: **[docs/RESULTS.md](docs/RESULTS.md)**.
