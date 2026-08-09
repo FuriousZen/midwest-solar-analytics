@@ -31,6 +31,16 @@ class PermitRequest(BaseModel):
     system_size_kw: float | None = Field(default=None, ge=0, le=1000)
     reported_cost_usd: float | None = Field(default=None, ge=0)
     permit_fee_usd: float | None = Field(default=None, ge=0)
+    building_fee_usd: float | None = Field(default=None, ge=0)
+    zoning_fee_usd: float | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "A non-zero zoning fee is the signal that zoning review was "
+            "triggered, which is one of the stronger predictors of a slow permit."
+        ),
+    )
+    other_fee_usd: float | None = Field(default=None, ge=0)
     sector: str | None = Field(default=None, examples=["residential"])
     review_track: str | None = Field(default=None, examples=["Express Permit Program"])
     permit_class: str | None = None

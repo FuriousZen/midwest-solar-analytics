@@ -106,3 +106,19 @@ reads, no network calls, one `XGBRegressor.predict` on a single row.
 
 Staleness is explicit — `/metadata` reports `feature_store_as_of`. Refreshing
 means re-running the pipeline.
+
+### Known train/serve gaps
+
+Two features cannot be reconstructed exactly from a request plus a snapshot, and
+both are handled by leaving the value **missing** rather than substituting
+something that would mean a different thing than it did in training:
+
+| Feature | Training | Serving |
+|---|---|---|
+| `contractor_days_since_last_app` | days since that contractor's previous filing | missing — needs filing history relative to the request date |
+| `jurisdiction_*` queue state | recomputed per row | last observed value for that jurisdiction, dated by `feature_store_as_of` |
+
+Everything else — calendar features, size/cost transforms, the zoning-review
+flag — is derived by the same code path in both places.
+`tests/test_serve.py::test_request_frame_matches_training_columns_and_levels`
+and `::test_zoning_review_flag_is_derived_the_same_way_as_in_training` pin that.

@@ -266,3 +266,19 @@ def test_feature_store_recovers_contractor_history(model_root):
     assert out["contractor_is_known"].tolist() == [1, 0]
     assert out.loc[0, "contractor_prior_permits"] > 0
     assert out.loc[0, "jurisdiction_open_permits"] is not None
+
+
+def test_zoning_review_flag_is_derived_the_same_way_as_in_training(model_root):
+    """Train/serve parity: the flag comes from the zoning fee in both paths."""
+    bundle = ModelBundle(SEGMENT, root=model_root)
+    X = request_frame(
+        [
+            PermitRequest(**dict(BODY, zoning_fee_usd=50.0)),
+            PermitRequest(**dict(BODY, zoning_fee_usd=0.0)),
+            PermitRequest(**BODY),  # not supplied -> must stay missing
+        ],
+        bundle,
+    )
+    assert X["zoning_review_required"].tolist()[:2] == [1.0, 0.0]
+    assert pd.isna(X["zoning_review_required"].iloc[2])
+    assert X["zoning_fee_usd"].tolist()[:2] == [50.0, 0.0]

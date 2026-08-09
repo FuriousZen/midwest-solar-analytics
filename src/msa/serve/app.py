@@ -119,9 +119,13 @@ def request_frame(items: list[PermitRequest], bundle: ModelBundle) -> pd.DataFra
     frame["log_system_size_kw"] = np.log1p(size)
     frame["log_reported_cost_usd"] = np.log1p(cost)
     frame["cost_per_kw"] = (cost / size).replace([np.inf, -np.inf], np.nan)
-    for c in ("building_fee_usd", "zoning_fee_usd", "other_fee_usd"):
-        frame[c] = np.nan
-    frame["zoning_review_required"] = np.nan
+    # `zoning_review_required` is derived from the zoning fee at training time
+    # (msa.features.build._application_features); deriving it the same way here
+    # rather than hard-coding NaN keeps the training and serving definitions
+    # identical. Missing stays missing -- XGBoost splits on NaN natively, and a
+    # register that publishes no fee breakdown had NaN during training too.
+    zoning = pd.to_numeric(frame.get("zoning_fee_usd"), errors="coerce")
+    frame["zoning_review_required"] = np.where(zoning.isna(), np.nan, (zoning > 0).astype(float))
     frame["timeline_segment"] = bundle.segment
 
     return as_model_frame(frame, bundle.categories)

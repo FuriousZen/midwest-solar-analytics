@@ -147,5 +147,11 @@ def apply_store(rows: pd.DataFrame, store: dict) -> pd.DataFrame:
         1 if (c is not None and not pd.isna(c) and str(c) in known) else 0
         for c in out.get("contractor", pd.Series([None] * len(out)))
     ]
+    # Known, deliberate train/serve gap: the gap since a contractor's previous
+    # filing needs their filing history relative to *this* request date, which
+    # the snapshot cannot answer. It is left missing rather than approximated
+    # with a stale value, so the booster routes these rows down its missing
+    # branch instead of being fed a number that means something different from
+    # what it meant in training. Documented in docs/METHODOLOGY.md.
     out["contractor_days_since_last_app"] = np.nan
     return out
