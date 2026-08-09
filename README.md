@@ -49,7 +49,7 @@ a flattering R² driven entirely by which milestone pair a row belongs to.
 ```bash
 git clone <this repo> && cd midwest-solar-analytics
 make venv                       # .venv from requirements.lock.txt + editable install
-make test                       # 189 tests, offline, no network
+make test                       # 194 tests, offline, no network
 make smoke                      # whole pipeline end to end on a synthetic
                                 # corpus, in a temp dir, ~3 min, no network
 make data                       # download & assemble the real public corpus (~1 min)
@@ -383,7 +383,7 @@ booster, so extra concurrency buys queueing, not work. Scale by adding workers.
 | 29,425-record Midwest solar permit corpus, 12 jurisdictions, 8 states | **measured** — `data/processed/dataset_summary.json` |
 | Horizon coverage / censoring analysis | **measured** — `reports/horizon_coverage.json` |
 | Four baselines per segment, identical 5-fold splits | **measured** — `reports/<segment>/baseline_results.json` |
-| Test suite (189 tests, incl. 5 leakage tests) | **measured** — `make test` |
+| Test suite (194 tests, incl. 5 leakage tests) | **measured** — `make test` |
 | MLflow tracking — 175 logged runs exported | **measured** — `reports/mlflow_runs_summary.json` |
 | Tracking the Sun state coverage, all 7 editions | **measured** — `reports/tts_state_coverage.json` |
 | Tuned final model, both segments | **measured** — `reports/<segment>/final_metrics.json`, on **136** (A) and **20** (B) Optuna trials, not 200 |
