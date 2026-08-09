@@ -156,13 +156,32 @@ def final_table(seg: str) -> str:
         ("holdout bias (days)", m.get("test_bias")),
         ("naive (train-median) holdout MAE", m.get("naive_test_mae")),
         ("naive (train-median) holdout R²", m.get("naive_test_r2")),
-        ("improvement vs stock XGBoost, CV MAE", m.get("improvement_vs_default_cv_mae_pct")),
-        ("improvement vs naive, holdout MAE", m.get("improvement_vs_naive_test_mae_pct")),
+        ("80% interval empirical coverage (holdout)", m.get("interval_empirical_coverage_test")),
+        ("80% interval coverage before conformal calibration", m.get("interval_uncalibrated_coverage_test")),
+        ("80% interval median width (days)", m.get("interval_median_width_days")),
     ]
     lines = ["| metric | value |", "|---|---:|"]
     for label, v in rows:
-        suffix = "%" if "improvement" in label else ""
-        lines.append(f"| {label} | {fmt(v, 4)}{suffix} |")
+        lines.append(f"| {label} | {fmt(v, 4)} |")
+
+    lines += [
+        "",
+        "Reduction in 5-fold CV MAE achieved by the tuned model, against each",
+        "baseline measured on the identical folds:",
+        "",
+        "| baseline | baseline CV MAE (d) | tuned CV MAE (d) | reduction |",
+        "|---|---:|---:|---:|",
+    ]
+    b = _read(REPORTS_DIR / seg / "baseline_results.json")
+    tuned = m.get("cv_mae")
+    if b and tuned is not None:
+        for name, bm in b["results"].items():
+            key = f"improvement_vs_{name}_cv_mae_pct"
+            imp = m.get(key)
+            lines.append(
+                f"| `{name}` | {bm['cv_mae']:.3f} | {tuned:.3f} | "
+                f"{fmt(imp, 1)}% |"
+            )
     return "\n".join(lines) + "\n"
 
 

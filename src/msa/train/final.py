@@ -267,6 +267,22 @@ def run(segment: str, log_to_mlflow: bool = True) -> dict:
     naive = np.full(ds.n_test, float(ds.y_train.median()))
     naive_test = regression_metrics(ds.y_test, naive, prefix="naive_test_")
 
+    # "improvement over baseline" depends entirely on which baseline. Report it
+    # against every one we measured so the reader can see the spread rather than
+    # being handed whichever number flatters the model most. The headline figure
+    # quoted elsewhere is the one against stock XGBoost, because that is what
+    # "hyper-parameter search improved the model" actually means.
+    improvements: dict[str, float] = {}
+    baseline_path = report_dir(segment) / "baseline_results.json"
+    if baseline_path.exists():
+        for name, bm in json.loads(baseline_path.read_text())["results"].items():
+            improvements[f"improvement_vs_{name}_cv_mae_pct"] = improvement_pct(
+                bm["cv_mae"], tuned_cv["cv_mae"]
+            )
+            improvements[f"improvement_vs_{name}_cv_rmse_pct"] = improvement_pct(
+                bm["cv_rmse"], tuned_cv["cv_rmse"]
+            )
+
     metrics = {
         **tuned_cv,
         **test,
@@ -284,6 +300,7 @@ def run(segment: str, log_to_mlflow: bool = True) -> dict:
         "improvement_vs_naive_test_mae_pct": improvement_pct(
             naive_test["naive_test_mae"], test["test_mae"]
         ),
+        **improvements,
         "best_trial_number": trial_no,
     }
 
