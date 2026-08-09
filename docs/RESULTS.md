@@ -9,14 +9,14 @@ none of it is typed by hand._
 | claim | résumé says | measured | verdict |
 |---|---|---|---|
 | dataset size | 8,000+ historical installations | 29,425 permit records; 12,108 with an installation duration, 21,884 with a review duration | **MET** |
-| R² (model A, 5-fold CV) | 0.86 | not measured — run `make tune final SEGMENT=permit_to_completion` | **NOT MEASURED** |
-| MAE (model A, 5-fold CV) | 4.2 days | not measured — run `make tune final SEGMENT=permit_to_completion` | **NOT MEASURED** |
-| improvement over baseline (model A) | 23% | not measured — run `make tune final SEGMENT=permit_to_completion` | **NOT MEASURED** |
-| R² (model B, 5-fold CV) | 0.86 | not measured — run `make tune final SEGMENT=application_to_issue` | **NOT MEASURED** |
-| MAE (model B, 5-fold CV) | 4.2 days | not measured — run `make tune final SEGMENT=application_to_issue` | **NOT MEASURED** |
-| improvement over baseline (model B) | 23% | not measured — run `make tune final SEGMENT=application_to_issue` | **NOT MEASURED** |
-| MLflow runs | 60+ | 145 (136 optuna, 8 baseline, 1 optuna-parent) | **MET** |
-| p95 inference latency | < 50 ms | not measured — run `make bench` | **NOT MEASURED** |
+| R² (model A, 5-fold CV) | 0.86 | 0.3364 | **NOT MET** |
+| MAE (model A, 5-fold CV) | 4.2 days | 38.48 days | **NOT MET** |
+| improvement over baseline (model A) | 23% | 11.4% lower CV MAE vs stock XGBoost (vs the naive median baseline: 27.8%) | **NOT MET** |
+| R² (model B, 5-fold CV) | 0.86 | 0.3901 | **NOT MET** |
+| MAE (model B, 5-fold CV) | 4.2 days | 5.29 days | **NOT MET** |
+| improvement over baseline (model B) | 23% | 13.5% lower CV MAE vs stock XGBoost (vs the naive median baseline: 44.3%) | **NOT MET** |
+| MLflow runs | 60+ | 175 (156 optuna, 12 baseline, 4 final, 3 optuna-parent) | **MET** |
+| p95 inference latency | < 50 ms | 12.97 ms | **MET** |
 
 
 ## Dataset
@@ -65,17 +65,83 @@ Train rows: **8,117**  ·  holdout rows: **2,045**  ·  5-fold CV, seed 20250201
 
 ### Optuna study
 
-_optuna_study.json missing._
+* sampler: `TPESampler(multivariate=True, seed=20250201)`
+* trials completed: **136** (failed: 1, total recorded: 137)
+* CV: `KFold(shuffle=True, random_state=20250201)`, 5 folds
+* wall time: 0.0 min
+* best trial: #128
+
+| | stock XGBoost | tuned | change |
+|---|---:|---:|---:|
+| CV MAE (days) | 43.419 | 38.476 | **11.4%** lower |
+| CV RMSE (days) | 63.600 | 62.406 | 1.9% lower |
+| CV R² | 0.3108 | 0.3364 | +0.0256 |
+
+Best hyper-parameters:
+
+```json
+{
+  "log1p_target": true,
+  "grow_policy": "depthwise",
+  "objective": "reg:absoluteerror",
+  "n_estimators": 1200,
+  "learning_rate": 0.013937945029505124,
+  "max_depth": 10,
+  "min_child_weight": 2.7839241538424715,
+  "subsample": 0.831038213249144,
+  "colsample_bytree": 0.4343474874472253,
+  "colsample_bylevel": 0.7344084910093414,
+  "gamma": 2.3329123174991166e-08,
+  "reg_alpha": 1.738556156981663e-05,
+  "reg_lambda": 0.08092147363023233,
+  "max_bin": 256,
+  "max_cat_to_onehot": 9
+}
+```
 
 
 ### Final tuned model
 
-_final_metrics.json missing._
+| metric | value |
+|---|---:|
+| CV MAE (days) | 38.4755 |
+| CV RMSE (days) | 62.4063 |
+| CV R² | 0.3364 |
+| CV median abs. error (days) | 20.3780 |
+| holdout MAE (days) | 45.0963 |
+| holdout RMSE (days) | 65.0107 |
+| holdout R² | 0.0730 |
+| holdout median abs. error (days) | 30.6606 |
+| holdout bias (days) | -8.1991 |
+| naive (train-median) holdout MAE | 47.1178 |
+| naive (train-median) holdout R² | -0.1323 |
+| 80% interval empirical coverage (holdout) | 0.9081 |
+| 80% interval coverage before conformal calibration | 0.5178 |
+| 80% interval median width (days) | 163.6566 |
+
+Reduction in 5-fold CV MAE achieved by the tuned model, against each
+baseline measured on the identical folds:
+
+| baseline | baseline CV MAE (d) | tuned CV MAE (d) | reduction |
+|---|---:|---:|---:|
+| `global_median` | 53.302 | 38.476 | 27.8% |
+| `group_median` | 47.618 | 38.476 | 19.2% |
+| `ridge` | 47.059 | 38.476 | 18.2% |
+| `xgb_default` | 43.419 | 38.476 | 11.4% |
 
 
 ### Holdout accuracy by jurisdiction
 
-_holdout_by_jurisdiction.csv missing._
+| jurisdiction | holdout n | median actual (d) | MAE (d) | median AE (d) | bias (d) | interval coverage |
+|---|---:|---:|---:|---:|---:|---:|
+| Kansas City | 703 | 44 | 36.1 | 20.8 | -20.5 | 92% |
+| Saint Paul | 521 | 63 | 49.9 | 36.1 | -4.6 | 87% |
+| Minneapolis | 490 | 57 | 46.7 | 37.5 | +4.3 | 92% |
+| Cincinnati | 104 | 142 | 78.1 | 69.4 | -4.5 | 89% |
+| Golden Valley | 95 | 57 | 47.5 | 34.7 | -9.3 | 93% |
+| Naperville | 81 | 68 | 39.9 | 25.8 | -15.8 | 96% |
+| Ames | 37 | 29 | 46.3 | 27.6 | +20.0 | 97% |
+| Overland Park | 14 | 33 | 28.2 | 16.2 | -11.2 | 93% |
 
 
 ## Model B — permit review timeline (application → issue)
@@ -96,53 +162,168 @@ Train rows: **16,684**  ·  holdout rows: **4,194**  ·  5-fold CV, seed 2025020
 
 ### Optuna study
 
-_optuna_study.json missing._
+* sampler: `TPESampler(multivariate=True, seed=20250201)`
+* trials completed: **20**
+* CV: `KFold(shuffle=True, random_state=20250201)`, 5 folds
+* wall time: 8.3 min
+* best trial: #3
+
+| | stock XGBoost | tuned | change |
+|---|---:|---:|---:|
+| CV MAE (days) | 6.114 | 5.291 | **13.5%** lower |
+| CV RMSE (days) | 12.678 | 13.193 | -4.1% lower |
+| CV R² | 0.4368 | 0.3901 | -0.0467 |
+
+Best hyper-parameters:
+
+```json
+{
+  "log1p_target": true,
+  "grow_policy": "depthwise",
+  "objective": "reg:absoluteerror",
+  "n_estimators": 750,
+  "learning_rate": 0.01734550660238028,
+  "max_depth": 7,
+  "min_child_weight": 0.5661734112922325,
+  "subsample": 0.6107905403772101,
+  "colsample_bytree": 0.507307381663546,
+  "colsample_bylevel": 0.4733857759753984,
+  "gamma": 6.38154522776077e-06,
+  "reg_alpha": 6.153738309153346e-06,
+  "reg_lambda": 0.27418917581872043,
+  "max_bin": 512,
+  "max_cat_to_onehot": 11
+}
+```
 
 
 ### Final tuned model
 
-_final_metrics.json missing._
+| metric | value |
+|---|---:|
+| CV MAE (days) | 5.2910 |
+| CV RMSE (days) | 13.1925 |
+| CV R² | 0.3901 |
+| CV median abs. error (days) | 1.2622 |
+| holdout MAE (days) | 8.3236 |
+| holdout RMSE (days) | 15.8784 |
+| holdout R² | 0.2203 |
+| holdout median abs. error (days) | 3.6873 |
+| holdout bias (days) | -4.8834 |
+| naive (train-median) holdout MAE | 10.0427 |
+| naive (train-median) holdout R² | -0.1087 |
+| 80% interval empirical coverage (holdout) | 0.8879 |
+| 80% interval coverage before conformal calibration | 0.6986 |
+| 80% interval median width (days) | 20.9850 |
+
+Reduction in 5-fold CV MAE achieved by the tuned model, against each
+baseline measured on the identical folds:
+
+| baseline | baseline CV MAE (d) | tuned CV MAE (d) | reduction |
+|---|---:|---:|---:|
+| `global_median` | 9.497 | 5.291 | 44.3% |
+| `group_median` | 7.862 | 5.291 | 32.7% |
+| `ridge` | 7.119 | 5.291 | 25.7% |
+| `xgb_default` | 6.114 | 5.291 | 13.5% |
 
 
 ### Holdout accuracy by jurisdiction
 
-_holdout_by_jurisdiction.csv missing._
+| jurisdiction | holdout n | median actual (d) | MAE (d) | median AE (d) | bias (d) | interval coverage |
+|---|---:|---:|---:|---:|---:|---:|
+| Chicago | 2445 | 6 | 7.2 | 3.1 | -5.2 | 88% |
+| Kansas City | 886 | 6 | 6.1 | 3.0 | -3.7 | 92% |
+| Cincinnati | 200 | 15 | 12.9 | 10.0 | -3.2 | 93% |
+| Cleveland | 196 | 20 | 19.2 | 11.2 | -8.8 | 73% |
+| Naperville | 135 | 21 | 9.0 | 6.9 | -1.0 | 97% |
+| Detroit | 130 | 27 | 17.1 | 11.5 | -7.0 | 82% |
+| Golden Valley | 126 | 0 | 5.8 | 0.1 | -0.3 | 96% |
+| Ames | 51 | 12 | 22.4 | 10.7 | -14.7 | 84% |
+| Overland Park | 23 | 7 | 12.7 | 5.6 | -9.6 | 78% |
+| Bismarck | 2 | 6 | 3.8 | 3.8 | -0.5 | 100% |
 
 
 ## Partial Optuna study
 
-#### `permit_to_completion` — INCOMPLETE study, 136 of 200 trials logged
-
-> These are real logged trials from a study that was **stopped before
-> completing**. No final model was fitted from them and no holdout was
-> scored, so they are *not* the project's results — they are a partial
-> read on where a finished study would land.
-
-| | value |
-|---|---:|
-| trials logged | 136 of 200 |
-| best trial CV MAE (days) | 38.476 |
-| best trial CV R² | 0.3364 |
-| stock XGBoost CV MAE (days) | 43.419 |
-| reduction in CV MAE so far | 11.4% |
+_no partial study logged._
 
 
 ## MLflow tracking
 
-Experiment `midwest-solar-timeline` contains **145 runs**.
+Experiment `midwest-solar-timeline` contains **175 runs**.
 
 | stage | runs |
 |---|---:|
-| `optuna` | 136 |
-| `baseline` | 8 |
-| `optuna-parent` | 1 |
-| **total** | **145** |
+| `optuna` | 156 |
+| `baseline` | 12 |
+| `final` | 4 |
+| `optuna-parent` | 3 |
+| **total** | **175** |
 
-First run 2026-08-09 00:17:22.862000+00:00, last run 2026-08-09 00:51:56.362000+00:00.
+First run 2026-08-09 00:17:22.862000+00:00, last run 2026-08-09 01:41:14.921000+00:00.
 
 Full run table: `reports/mlflow_runs.csv` (committed).
 
 
 ## Serving latency
 
-_no latency artifact — run `python -m msa.bench.latency`._
+**`inprocess` · `permit_to_completion`** — 2,000 single-project requests, measured 2026-08-09 on Linux-6.12.76-linuxkit-aarch64-with-glibc2.36
+
+| percentile | latency (ms) |
+|---|---:|
+| p50 | 11.59 |
+| p90 | 12.51 |
+| **p95** | **12.97** |
+| p99 | 16.99 |
+| max | 38.76 |
+| mean | 11.86 |
+
+Under concurrent load (same request mix, N in flight at once):
+
+| concurrent requests | p50 (ms) | p95 (ms) | throughput (req/s) |
+|---:|---:|---:|---:|
+| 1 | 11.59 | 12.97 | 84 |
+| 8 | 83.84 | 126.04 | 92 |
+| 32 | 319.42 | 451.72 | 92 |
+
+Batch endpoint: 100 projects per call, p50 30.9 ms per call (0.309 ms per project).
+
+**`inprocess` · `application_to_issue`** — 2,000 single-project requests, measured 2026-08-09 on Linux-6.12.76-linuxkit-aarch64-with-glibc2.36
+
+| percentile | latency (ms) |
+|---|---:|
+| p50 | 12.25 |
+| p90 | 14.24 |
+| **p95** | **15.95** |
+| p99 | 27.16 |
+| max | 71.45 |
+| mean | 12.92 |
+
+Under concurrent load (same request mix, N in flight at once):
+
+| concurrent requests | p50 (ms) | p95 (ms) | throughput (req/s) |
+|---:|---:|---:|---:|
+| 1 | 12.25 | 15.95 | 77 |
+| 8 | 122.64 | 194.13 | 62 |
+| 32 | 465.84 | 614.99 | 63 |
+
+Batch endpoint: 100 projects per call, p50 21.4 ms per call (0.214 ms per project).
+
+**`http` · `permit_to_completion`** — 600 single-project requests, measured 2026-08-09 on Linux-6.12.76-linuxkit-aarch64-with-glibc2.36
+
+| percentile | latency (ms) |
+|---|---:|
+| p50 | 19.65 |
+| p90 | 21.43 |
+| **p95** | **22.32** |
+| p99 | 25.11 |
+| max | 67.47 |
+| mean | 20.01 |
+
+Under concurrent load (same request mix, N in flight at once):
+
+| concurrent requests | p50 (ms) | p95 (ms) | throughput (req/s) |
+|---:|---:|---:|---:|
+| 1 | 19.65 | 22.32 | 50 |
+| 8 | 150.03 | 224.94 | 52 |
+| 32 | 592.38 | 792.29 | 54 |

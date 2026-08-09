@@ -493,7 +493,15 @@ def readme_block() -> str:
 
             parts.append(f"| {label} | {f(a.get(key))} | {f(b.get(key))} |")
 
-        row("training rows", "n_train")
+        # n_train lives in the split artifact, not in the metrics blob
+        ba = _read(REPORTS_DIR / "permit_to_completion" / "baseline_results.json") or {}
+        bb = _read(REPORTS_DIR / "application_to_issue" / "baseline_results.json") or {}
+        parts.append(
+            f"| training rows | {ba.get('n_train', 'not measured'):,} | "
+            f"{bb.get('n_train', 'not measured'):,} |"
+            if ba.get("n_train") and bb.get("n_train")
+            else "| training rows | not measured | not measured |"
+        )
         row("5-fold CV MAE (days)", "cv_mae", 2)
         row("5-fold CV RMSE (days)", "cv_rmse", 2)
         row("5-fold CV R²", "cv_r2", 4)
