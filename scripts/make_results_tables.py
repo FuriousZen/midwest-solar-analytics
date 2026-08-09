@@ -228,14 +228,21 @@ def mlflow_section() -> str:
 def latency_section() -> str:
     out = []
     for mode in ("inprocess", "http"):
-        d = _read(REPORTS_DIR / f"latency_{mode}.json")
-        if not d:
-            continue
+        for seg in SEGMENT_ORDER:
+            d = _read(REPORTS_DIR / f"latency_{mode}_{seg}.json")
+            if not d:
+                continue
+            out.extend(_latency_block(d, mode))
+    return "\n".join(out) if out else "_no latency artifact — run `python -m msa.bench.latency`._\n"
+
+
+def _latency_block(d: dict, mode: str) -> list[str]:
+    out: list[str] = []
+    if True:
         s = d["single_request"]
         out.append(
-            f"**`{mode}`** — {s['n']:,} single-project requests, "
-            f"segment `{d['segment']}`, measured {d['measured_on']} on "
-            f"{d['host']['platform']}\n"
+            f"**`{mode}` · `{d['segment']}`** — {s['n']:,} single-project requests, "
+            f"measured {d['measured_on']} on {d['host']['platform']}\n"
         )
         out += [
             "| percentile | latency (ms) |",
@@ -255,7 +262,7 @@ def latency_section() -> str:
                 f"p50 {b['p50_ms']:.1f} ms per call "
                 f"({b['per_item_p50_ms']:.3f} ms per project).\n"
             )
-    return "\n".join(out) if out else "_no latency artifact — run `python -m msa.bench.latency`._\n"
+    return out
 
 
 def scorecard() -> str:
@@ -326,7 +333,7 @@ def scorecard() -> str:
             )
         )
 
-    lat = _read(REPORTS_DIR / "latency_inprocess.json")
+    lat = _read(REPORTS_DIR / "latency_inprocess_permit_to_completion.json")
     if lat:
         p95 = lat["single_request"]["p95_ms"]
         rows.append(

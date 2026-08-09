@@ -28,7 +28,7 @@ done
 
 echo "==> 6/7 export MLflow run summary + benchmark the API"
 $PY -m scripts.export_mlflow_summary
-$PY -m msa.bench.latency --segment permit_to_completion --requests 2000
+for SEG in $SEGMENTS; do $PY -m msa.bench.latency --segment "$SEG" --requests 2000; done
 
 echo "==> 7/7 regenerate docs/RESULTS.md from the measured artifacts"
 $PY -m scripts.make_results_tables

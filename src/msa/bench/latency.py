@@ -12,7 +12,8 @@ Two modes:
     includes the socket, the HTTP parser and the event loop.
 
 Both modes report p50/p90/p95/p99, run a warm-up that is discarded, and write
-``reports/latency_<mode>.json``. Payloads are sampled from the held-out set so
+``reports/latency_<mode>_<segment>.json``. Payloads are sampled from the
+held-out set so
 the request distribution matches reality rather than one hand-picked example.
 
 Run::
@@ -185,7 +186,7 @@ def main() -> None:
         "single_request": single,
         "batch_request": batch,
     }
-    out = REPORTS_DIR / f"latency_{args.mode}.json"
+    out = REPORTS_DIR / f"latency_{args.mode}_{args.segment}.json"
     out.write_text(json.dumps(result, indent=2))
     print(json.dumps(result, indent=2))
     LOG.info(
