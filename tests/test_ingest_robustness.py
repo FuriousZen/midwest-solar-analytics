@@ -388,3 +388,63 @@ def test_failures_are_recorded_in_the_dataset_summary(monkeypatch):
     summary = build_dataset.summarise(build_dataset.build())
     assert "dead" in summary["failed_sources"]
     assert summary["total_records"] == 6
+
+
+def test_only_does_not_overwrite_the_corpus(monkeypatch, capsys, tmp_path):
+    """`--only X` used to write a one-source parquet over the twelve-source one."""
+    import sys
+
+    _install_sources(
+        monkeypatch,
+        {"alive_a": _canonical_rows("alive_a"), "alive_b": _canonical_rows("alive_b")},
+    )
+    target = tmp_path / "installations.parquet"
+    monkeypatch.setattr(build_dataset, "OUT_PARQUET", target)
+    monkeypatch.setattr(build_dataset, "OUT_SUMMARY", tmp_path / "summary.json")
+    monkeypatch.setattr(sys, "argv", ["build_dataset", "--only", "alive_a"])
+
+    build_dataset.main()
+
+    assert not target.exists(), "a partial corpus was written over the real one"
+    assert "NOT overwriting" in capsys.readouterr().out
+
+
+def test_only_with_write_is_an_explicit_opt_out(monkeypatch, tmp_path):
+    import sys
+
+    _install_sources(
+        monkeypatch,
+        {"alive_a": _canonical_rows("alive_a"), "alive_b": _canonical_rows("alive_b")},
+    )
+    target = tmp_path / "installations.parquet"
+    monkeypatch.setattr(build_dataset, "OUT_PARQUET", target)
+    monkeypatch.setattr(build_dataset, "OUT_SUMMARY", tmp_path / "summary.json")
+    monkeypatch.setattr(
+        sys, "argv", ["build_dataset", "--only", "alive_a", "--write"]
+    )
+
+    build_dataset.main()
+
+    assert target.exists()
+    assert set(pd.read_parquet(target)["source"]) == {"alive_a"}
+
+
+def test_full_build_writes_both_artifacts_atomically(monkeypatch, tmp_path):
+    import json as _json
+    import sys
+
+    _install_sources(
+        monkeypatch,
+        {"alive_a": _canonical_rows("alive_a"), "alive_b": _canonical_rows("alive_b")},
+    )
+    target = tmp_path / "installations.parquet"
+    summary = tmp_path / "summary.json"
+    monkeypatch.setattr(build_dataset, "OUT_PARQUET", target)
+    monkeypatch.setattr(build_dataset, "OUT_SUMMARY", summary)
+    monkeypatch.setattr(sys, "argv", ["build_dataset"])
+
+    build_dataset.main()
+
+    assert target.exists() and summary.exists()
+    assert not list(tmp_path.glob("*.tmp")), "a temp file was left behind"
+    assert _json.loads(summary.read_text())["total_records"] == 6

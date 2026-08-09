@@ -117,6 +117,88 @@ def _degraded_start_allowed() -> bool:
     return os.environ.get("MSA_ALLOW_DEGRADED_START", "").lower() in {"1", "true", "yes"}
 
 
+class BodySizeLimitMiddleware:
+    """Bound the request body even when the client never declares its size.
+
+    The ``Content-Length`` check one layer in rejects an oversized body before a
+    byte of it is read, which handles every ordinary client. It does nothing
+    about ``Transfer-Encoding: chunked``, where there is no declared length and
+    the ASGI server will buffer whatever arrives.
+
+    So this layer reads the body itself, counting as it goes, and answers 413
+    the moment the cap is passed -- without ever calling the application. Peak
+    memory per request is therefore bounded by the cap whether or not the client
+    declares a length. The buffered chunks are replayed to the application
+    afterwards so nothing downstream can tell the difference.
+
+    Written as raw ASGI rather than ``BaseHTTPMiddleware`` for two reasons: it
+    has to wrap ``receive``, which ``BaseHTTPMiddleware`` does not expose; and
+    an exception raised from inside a wrapped ``receive`` does not propagate
+    cleanly through ``BaseHTTPMiddleware``'s body pump -- it surfaces at the
+    route layer as an unrecognised error and FastAPI renders it
+    ``400 There was an error parsing the body``. Answering directly sidesteps
+    the whole question.
+    """
+
+    def __init__(self, app, max_bytes: int):
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def _reject(self, send) -> None:
+        body = json.dumps(
+            {
+                "error": "payload_too_large",
+                "detail": f"request body exceeds the {self.max_bytes} byte limit",
+                "request_id": request_id_var.get(),
+            }
+        ).encode()
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 413,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode()),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": body})
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        buffered: list[dict] = []
+        total = 0
+        more = True
+        while more:
+            message = await receive()
+            if message.get("type") != "http.request":
+                buffered.append(message)
+                break
+            total += len(message.get("body", b""))
+            if total > self.max_bytes:
+                LOG.warning(
+                    "rejecting oversized request body",
+                    extra={"bytes_read": total, "limit": self.max_bytes},
+                )
+                await self._reject(send)
+                return
+            buffered.append(message)
+            more = bool(message.get("more_body", False))
+
+        queued = iter(buffered)
+
+        async def replay():
+            try:
+                return next(queued)
+            except StopIteration:
+                return await receive()
+
+        await self.app(scope, replay, send)
+
+
 class ModelBundle:
     """Everything needed to answer a request, loaded and verified once.
 
@@ -448,6 +530,9 @@ def create_app(
     app.state.load_error = load_error
     app.state.latencies = latencies
     app.state.counters = counters
+
+    # outermost of our own layers: caps a chunked body that declares no length
+    app.add_middleware(BodySizeLimitMiddleware, max_bytes=MAX_BODY_BYTES)
 
     # -- cross-cutting middleware -----------------------------------------
 
@@ -821,6 +906,7 @@ __all__ = [
     "ARTIFACT_SCHEMA_VERSION",
     "MAX_CONCURRENT_EXPLAIN",
     "MAX_EXPLAIN_BATCH",
+    "BodySizeLimitMiddleware",
     "ModelBundle",
     "app",
     "create_app",

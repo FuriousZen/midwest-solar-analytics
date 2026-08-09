@@ -753,3 +753,60 @@ def test_asgi_entrypoint_starts_cleanly_with_a_good_artifact(model_root):
     sent = _drive_lifespan_startup(asgi)
     assert sent[0]["type"] == "lifespan.startup.complete"
     assert asgi.app.state.bundle is not None
+
+
+def test_chunked_body_without_content_length_is_still_capped(model_root, monkeypatch):
+    """`Content-Length` is optional; the cap must not depend on the client.
+
+    httpx sends `Transfer-Encoding: chunked` when the request content is an
+    iterator, so this request arrives with no declared size at all.
+    """
+    import httpx
+
+    from msa.serve.app import BodySizeLimitMiddleware, create_app
+
+    app = create_app(SEGMENT, root=model_root)
+    # rebuild the stack with a small cap rather than shipping a megabyte
+    app.user_middleware = [
+        m for m in app.user_middleware if m.cls is not BodySizeLimitMiddleware
+    ]
+    app.middleware_stack = None
+    app.add_middleware(BodySizeLimitMiddleware, max_bytes=2048)
+
+    def chunks():
+        for _ in range(50):
+            yield b"x" * 1024
+
+    with TestClient(app, raise_server_exceptions=False) as tc:
+        sent_headers = {}
+
+        def _capture(request: httpx.Request):
+            sent_headers.update(request.headers)
+
+        tc.event_hooks = {"request": [_capture]}
+        r = tc.post(
+            "/predict",
+            content=chunks(),
+            headers={"content-type": "application/json"},
+        )
+
+    assert "content-length" not in sent_headers, "the client declared a length"
+    assert r.status_code == 413, r.text
+    assert r.json()["error"] == "payload_too_large"
+    assert_no_leak(r.text)
+
+
+def test_normal_sized_chunked_body_still_works(model_root):
+    from msa.serve.app import create_app
+
+    app = create_app(SEGMENT, root=model_root)
+
+    def chunks():
+        yield json.dumps(BODY).encode()
+
+    with TestClient(app) as tc:
+        r = tc.post(
+            "/predict", content=chunks(), headers={"content-type": "application/json"}
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["predicted_days"] >= 0

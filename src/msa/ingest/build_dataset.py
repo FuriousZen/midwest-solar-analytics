@@ -184,6 +184,11 @@ def main() -> None:
     ap.add_argument("--refresh", action="store_true", help="re-download raw sources")
     ap.add_argument("--only", nargs="*", default=None, help="restrict to source keys")
     ap.add_argument(
+        "--write",
+        action="store_true",
+        help="with --only, overwrite the dataset with just those sources",
+    )
+    ap.add_argument(
         "--strict",
         action="store_true",
         help="fail the run if any single source fails, instead of skipping it",
@@ -191,11 +196,23 @@ def main() -> None:
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    df = build(
-        refresh=args.refresh,
-        only=tuple(args.only) if args.only else None,
-        strict=args.strict,
-    )
+    only = tuple(args.only) if args.only else None
+    df = build(refresh=args.refresh, only=only, strict=args.strict)
+
+    if only and not args.write:
+        # `--only` used to overwrite installations.parquet with a corpus
+        # containing just those sources, silently shrinking the dataset every
+        # downstream stage reads. The useful workflow is "refresh one register's
+        # cache, then rebuild the whole thing from cache", so that is the
+        # default; `--write` is the explicit opt-out.
+        print(
+            f"--only was given ({', '.join(only)}): fetched {len(df):,} rows and "
+            f"refreshed their caches, but NOT overwriting {OUT_PARQUET} with a "
+            f"partial corpus. Re-run without --only to rebuild it, or pass "
+            f"--write to overwrite deliberately."
+        )
+        return
+
     # Write both artifacts atomically: a half-written parquet is exactly the
     # input that makes every downstream stage fail in a confusing way.
     tmp_parquet = OUT_PARQUET.with_suffix(".parquet.tmp")
