@@ -9,117 +9,16 @@ response schema.
 
 from __future__ import annotations
 
-import json
-
-import numpy as np
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from msa.features.build import CATEGORICAL_FEATURES, FEATURES, build_features, clean
-from msa.features.store import apply_store, build_store, save_store
+from msa.features.build import CATEGORICAL_FEATURES, FEATURES
+from msa.features.store import apply_store
 from msa.serve.app import ModelBundle, create_app, request_frame
 from msa.serve.schemas import PermitRequest
 
 SEGMENT = "permit_to_completion"
-
-
-@pytest.fixture(scope="module")
-def model_root(tmp_path_factory, request):
-    """Train a small real model on synthetic records and persist it."""
-    from xgboost import XGBRegressor
-
-    from msa.config import CANONICAL_COLUMNS, max_timeline_days
-
-    rng = np.random.default_rng(0)
-    n = 400
-    start = pd.Timestamp("2021-01-01") + pd.to_timedelta(
-        rng.integers(0, 900, n), unit="D"
-    )
-    review = rng.integers(1, 40, n)
-    build_days = rng.integers(5, 200, n)
-    df = pd.DataFrame(
-        {
-            "record_id": [f"test:{i}" for i in range(n)],
-            "source": "test_source",
-            "jurisdiction": rng.choice(["Testville", "Sampleburg"], n),
-            "state": "IL",
-            "application_date": start,
-            "issue_date": start + pd.to_timedelta(review, unit="D"),
-            "completion_date": start + pd.to_timedelta(review + build_days, unit="D"),
-            "system_size_kw": rng.uniform(3, 25, n),
-            "reported_cost_usd": rng.uniform(8000, 80000, n),
-            "permit_fee_usd": rng.uniform(50, 900, n),
-            "sector": rng.choice(["residential", "commercial"], n),
-            "review_track": rng.choice(["Express", "Standard"], n),
-            "contractor": rng.choice(["ACME SOLAR", "BRIGHT ROOF", None], n),
-            "zip_code": rng.choice(["60601", "55401"], n),
-            "latitude": rng.uniform(41, 45, n),
-            "longitude": rng.uniform(-93, -87, n),
-            "mount_type": "roof",
-            "roof_type": rng.choice(["flat", "pitched"], n),
-            "battery": rng.integers(0, 2, n),
-            "permit_class": rng.choice(["Alteration", "New"], n),
-            "district": rng.choice(["ward-1", "ward-2"], n),
-            "building_fee_usd": rng.uniform(0, 500, n),
-            "zoning_fee_usd": rng.choice([0.0, 50.0], n),
-            "other_fee_usd": rng.uniform(0, 300, n),
-            "n_parties": rng.integers(1, 6, n),
-            "has_expeditor": rng.integers(0, 2, n),
-            "has_engineer": rng.integers(0, 2, n),
-            "has_design_professional": rng.integers(0, 2, n),
-            "description_length": rng.integers(20, 400, n),
-        }
-    )[list(CANONICAL_COLUMNS)]
-
-    cleaned = clean(df, segment=SEGMENT, apply_censor_guard=False)
-    X, y = build_features(cleaned)
-    model = XGBRegressor(
-        enable_categorical=True, tree_method="hist", n_estimators=40, max_depth=3
-    )
-    model.fit(X, y)
-
-    qmodel = XGBRegressor(
-        objective="reg:quantileerror",
-        quantile_alpha=np.array([0.1, 0.5, 0.9]),
-        enable_categorical=True,
-        tree_method="hist",
-        n_estimators=40,
-        max_depth=3,
-    )
-    qmodel.fit(X, y)
-
-    root = tmp_path_factory.mktemp("models")
-    d = root / SEGMENT
-    d.mkdir()
-    model.save_model(str(d / "model.json"))
-    qmodel.save_model(str(d / "model_quantiles.json"))
-    meta = cleaned[["record_id", "source", "jurisdiction", "state", "start_date", "end_date"]]
-    save_store(build_store(X, meta, cleaned), d / "feature_store.json")
-    (d / "metadata.json").write_text(
-        json.dumps(
-            {
-                "segment": SEGMENT,
-                "horizon_days": max_timeline_days(SEGMENT),
-                "features": list(FEATURES),
-                "categorical_features": list(CATEGORICAL_FEATURES),
-                "categories": {
-                    c: list(map(str, X[c].cat.categories)) for c in CATEGORICAL_FEATURES
-                },
-                "log1p_target": False,
-                "n_train": len(X),
-                "n_test": 0,
-                "train_start": str(cleaned["start_date"].min().date()),
-                "train_end": str(cleaned["start_date"].max().date()),
-                "test_start": str(cleaned["start_date"].max().date()),
-                "test_end": str(cleaned["start_date"].max().date()),
-                "jurisdictions": sorted(cleaned["jurisdiction"].unique().tolist()),
-                "metrics": {"cv_mae": 1.0},
-                "quantiles": [0.1, 0.5, 0.9],
-            }
-        )
-    )
-    return root
 
 
 @pytest.fixture(scope="module")

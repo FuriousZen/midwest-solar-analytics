@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 
 import mlflow
@@ -27,6 +28,7 @@ import numpy as np
 import pandas as pd
 from mlflow.models import infer_signature
 
+from msa.artifacts import ARTIFACT_SCHEMA_VERSION, build_model_version
 from msa.config import (
     DEFAULT_SEGMENT,
     MODELS_DIR,
@@ -204,6 +206,10 @@ def predict(
 def build_metadata(ds: Dataset, params: dict, log_target: bool, metrics: dict) -> dict:
     start, end = SEGMENTS[ds.segment]
     return {
+        # Stamped first so it is impossible to write a metadata file without
+        # it; msa.serve refuses to load an artifact that lacks or mismatches it.
+        "artifact_schema_version": ARTIFACT_SCHEMA_VERSION,
+        "trained_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "segment": ds.segment,
         "target": "timeline_days",
         "target_definition": f"({end} - {start}).days",
@@ -324,7 +330,23 @@ def run(segment: str, log_to_mlflow: bool = True) -> dict:
     save_store(store, md / "feature_store.json")
     meta = build_metadata(ds, params, log_target, metrics)
     meta["feature_store_as_of"] = store["as_of"]
-    (md / "metadata.json").write_text(json.dumps(meta, indent=2))
+    # Content-bound version stamp: changes if a single byte of the booster
+    # changes, stable across a copy. The serving layer publishes it on /health
+    # and on every prediction, so a response can always be traced to an artifact.
+    meta["model_version"] = build_model_version(
+        segment, md / "model.json", meta["trained_at"]
+    )
+    # Written atomically: a truncated metadata.json is exactly the failure mode
+    # the loader has to reject, so do not manufacture one here.
+    tmp = md / "metadata.json.tmp"
+    tmp.write_text(json.dumps(meta, indent=2))
+    tmp.replace(md / "metadata.json")
+    LOG.info(
+        "[%s] wrote model_version=%s (artifact schema v%d)",
+        segment,
+        meta["model_version"],
+        ARTIFACT_SCHEMA_VERSION,
+    )
 
     rd = report_dir(segment)
     (rd / "final_metrics.json").write_text(json.dumps(metrics, indent=2))
