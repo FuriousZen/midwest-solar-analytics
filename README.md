@@ -79,23 +79,40 @@ make bench                      # latency distribution
 | R² (model B, 5-fold CV) | 0.86 | not measured — run `make tune final SEGMENT=application_to_issue` | **NOT MEASURED** |
 | MAE (model B, 5-fold CV) | 4.2 days | not measured — run `make tune final SEGMENT=application_to_issue` | **NOT MEASURED** |
 | improvement over baseline (model B) | 23% | not measured — run `make tune final SEGMENT=application_to_issue` | **NOT MEASURED** |
-| MLflow runs | 60+ | not measured — run `python -m scripts.export_mlflow_summary` | **NOT MEASURED** |
+| MLflow runs | 60+ | 145 (136 optuna, 8 baseline, 1 optuna-parent) | **MET** |
 | p95 inference latency | < 50 ms | not measured — run `make bench` | **NOT MEASURED** |
 
 
 ### Headline metrics (tuned models)
 
-> **Not yet measured.** The 200-trial Optuna study and the final
-> tuned models have not been run to completion in this working tree,
-> so there are no tuned-model metrics, no MLflow run export, no
-> latency distribution and no SHAP dashboard to report. Rather than
-> print placeholder numbers, this section stays empty until
+> **Not measured.** The 200-trial Optuna study was stopped before
+> completing, so no tuned model was fitted, no holdout was scored,
+> and there is no latency distribution or SHAP dashboard. Rather
+> than print placeholder numbers this section stays empty until
 > `./scripts/run_pipeline.sh` has produced the artifacts, at which
 > point `python -m scripts.make_results_tables` fills it in.
 
 What **is** measured is the baseline layer below — four models per
 segment on identical 5-fold splits, which is what the tuned model
 must be judged against.
+
+### Partial Optuna study (incomplete)
+
+#### `permit_to_completion` — INCOMPLETE study, 136 of 200 trials logged
+
+> These are real logged trials from a study that was **stopped before
+> completing**. No final model was fitted from them and no holdout was
+> scored, so they are *not* the project's results — they are a partial
+> read on where a finished study would land.
+
+| | value |
+|---|---:|
+| trials logged | 136 of 200 |
+| best trial CV MAE (days) | 38.476 |
+| best trial CV R² | 0.3364 |
+| stock XGBoost CV MAE (days) | 43.419 |
+| reduction in CV MAE so far | 11.4% |
+
 
 ### Measured baselines
 
@@ -190,8 +207,10 @@ Key design decisions, with the evidence behind them, are in
   only what is observable at time *t*. Five tests enforce this, including one
   that shuffles the target and requires R² < 0.05.
 * **Absolute time indices are excluded.** `start_year` and days-since-start let
-  the booster memorise each period's level: measured effect on the
-  `application_to_issue` chronological holdout was R² −0.10 → +0.17 when removed.
+  the booster memorise each period's level, which inflates random-fold CV and
+  collapses on a chronological holdout. `make ablate` quantifies the effect on
+  the current corpus; no figure is quoted here because that artifact has not
+  been generated in this tree.
 * **The holdout is chronological *within each jurisdiction*.** A single global
   cut-off would also change the mix of cities, confounding "generalises forward
   in time" with "generalises to a new city".
@@ -257,7 +276,9 @@ values on a gradient-boosted tree, not an approximation.
 | Horizon coverage / censoring analysis | **measured** — `reports/horizon_coverage.json` |
 | Four baselines per segment, identical 5-fold splits | **measured** — `reports/<segment>/baseline_results.json` |
 | Test suite (53 tests, incl. 5 leakage tests) | **measured** — `make test` |
-| 200-trial Optuna study, tuned model, MLflow export, latency p95, SHAP dashboard | **not measured in this tree** — `./scripts/run_pipeline.sh` |
+| MLflow tracking — 145 logged runs exported | **measured** — `reports/mlflow_runs_summary.json` |
+| Tracking the Sun state coverage, all 7 editions | **measured** — `reports/tts_state_coverage.json` |
+| 200-trial Optuna study (stopped at 136/200), tuned model, latency p95, SHAP dashboard | **not measured in this tree** — `./scripts/run_pipeline.sh` |
 
 The study was started three times and stopped three times: twice deliberately
 (a leakage bug and a look-ahead bug were found mid-run and the affected trials
@@ -278,6 +299,15 @@ These are real measurements, and they set the range the tuned model will land in
   **CV MAE 43.4 days, CV R² 0.311**. This target is dominated by administrative
   permit-closure lag, and **neither 4.2 days nor R² = 0.86 is reachable** — it is
   off by an order of magnitude on MAE.
+
+The 136 Optuna trials that *were* logged before the study was stopped sharpen
+this further. The best trial reached **CV MAE 38.48, CV R² 0.336** — a **11.4%**
+reduction in CV MAE over stock XGBoost. The résumé claims **23%**. Tuning has
+already spent two-thirds of its trial budget to get half that, so **the 23%
+figure is unlikely to be met against a stock-XGBoost baseline**, though it is
+comfortably exceeded against the naive median baseline (53.30 → 38.48 is 27.8%).
+Which baseline the "23%" refers to is exactly the ambiguity the results table
+now resolves by reporting the improvement against all four.
 
 So on current evidence the résumé's **R² = 0.86 will not be met by either
 model**, and the **4.2-day MAE is only meaningful for the permit-review

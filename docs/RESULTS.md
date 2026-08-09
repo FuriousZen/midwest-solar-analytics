@@ -15,7 +15,7 @@ none of it is typed by hand._
 | R² (model B, 5-fold CV) | 0.86 | not measured — run `make tune final SEGMENT=application_to_issue` | **NOT MEASURED** |
 | MAE (model B, 5-fold CV) | 4.2 days | not measured — run `make tune final SEGMENT=application_to_issue` | **NOT MEASURED** |
 | improvement over baseline (model B) | 23% | not measured — run `make tune final SEGMENT=application_to_issue` | **NOT MEASURED** |
-| MLflow runs | 60+ | not measured — run `python -m scripts.export_mlflow_summary` | **NOT MEASURED** |
+| MLflow runs | 60+ | 145 (136 optuna, 8 baseline, 1 optuna-parent) | **MET** |
 | p95 inference latency | < 50 ms | not measured — run `make bench` | **NOT MEASURED** |
 
 
@@ -109,9 +109,38 @@ _final_metrics.json missing._
 _holdout_by_jurisdiction.csv missing._
 
 
+## Partial Optuna study
+
+#### `permit_to_completion` — INCOMPLETE study, 136 of 200 trials logged
+
+> These are real logged trials from a study that was **stopped before
+> completing**. No final model was fitted from them and no holdout was
+> scored, so they are *not* the project's results — they are a partial
+> read on where a finished study would land.
+
+| | value |
+|---|---:|
+| trials logged | 136 of 200 |
+| best trial CV MAE (days) | 38.476 |
+| best trial CV R² | 0.3364 |
+| stock XGBoost CV MAE (days) | 43.419 |
+| reduction in CV MAE so far | 11.4% |
+
+
 ## MLflow tracking
 
-_mlflow_runs_summary.json missing._
+Experiment `midwest-solar-timeline` contains **145 runs**.
+
+| stage | runs |
+|---|---:|
+| `optuna` | 136 |
+| `baseline` | 8 |
+| `optuna-parent` | 1 |
+| **total** | **145** |
+
+First run 2026-08-09 00:17:22.862000+00:00, last run 2026-08-09 00:51:56.362000+00:00.
+
+Full run table: `reports/mlflow_runs.csv` (committed).
 
 
 ## Serving latency

@@ -59,8 +59,12 @@ CV MAE from a true ~6.1 days to an apparent ~3.4 days. The fix is
 `start_year` and `days_since_series_start` are **not** features. They let the
 booster memorise each historical period's level, which inflates random-fold CV
 but collapses on a chronological holdout because the value is out of range for
-future permits. Measured on `application_to_issue`: stock XGBoost went from
-test R² **−0.10** with them to **+0.17** without.
+future permits.
+
+`python -m scripts.ablate_time_features` measures the size of that effect on the
+current corpus and writes `reports/ablation_time_features.json`. **That artifact
+is not present in this tree, so no figure is quoted here** — run the script if
+you need one.
 
 ## Evaluation protocol
 

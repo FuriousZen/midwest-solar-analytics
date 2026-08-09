@@ -3,7 +3,8 @@ PY ?= .venv/bin/python
 TRIALS ?= 200
 SEGMENT ?= permit_to_completion
 
-.PHONY: help venv data baselines tune final explain serve bench test pipeline clean
+.PHONY: help venv data baselines tune final explain serve bench test ablate \
+        results mlflow-summary pipeline mlflow-ui clean
 
 help:
 	@grep -E '^[a-z-]+:.*?##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/' | column -t -s "$$(printf '\t')"
@@ -37,7 +38,16 @@ bench: ## measure the latency distribution
 	$(PY) -m msa.bench.latency --segment $(SEGMENT) --requests 2000
 
 test: ## run the test suite
-	$(PY) -m pytest -q
+	$(PY) -m pytest
+
+ablate: ## measure what absolute time indices cost on the chronological holdout
+	$(PY) -m scripts.ablate_time_features
+
+mlflow-summary: ## export the committable MLflow run summary
+	$(PY) -m scripts.export_mlflow_summary
+
+results: ## regenerate docs/RESULTS.md and the README results block
+	$(PY) -m scripts.make_results_tables
 
 pipeline: ## everything, both segments, end to end
 	./scripts/run_pipeline.sh

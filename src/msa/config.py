@@ -122,8 +122,9 @@ DEFAULT_SEGMENT = os.environ.get("MSA_SEGMENT", "permit_to_completion")
 #: over-the-counter permits, or an inspection closed the day it was issued).
 #: The upper bound is the horizon the service predicts within; jobs that take
 #: longer are treated as out of scope rather than silently squashed into the
-#: target distribution. Each bound covers >=98% of the observed rows for that
-#: segment -- see reports/dataset_summary.json for the realised percentages.
+#: target distribution. Realised coverage differs per segment and is recorded
+#: below -- see data/processed/dataset_summary.json and
+#: reports/horizon_coverage.json for the numbers behind it.
 MIN_TIMELINE_DAYS = 0
 #: Coverage of the observed duration distribution at each bound, measured on
 #: the assembled corpus (scripts/report_horizon_coverage.py):

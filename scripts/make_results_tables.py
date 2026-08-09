@@ -117,7 +117,12 @@ def study_table(seg: str) -> str:
     base = s["baseline_xgb_default"]
     lines = [
         f"* sampler: `{s['sampler']}`",
-        f"* trials completed: **{s['n_trials']}**",
+        f"* trials completed: **{s.get('n_trials_completed', s['n_trials'])}**"
+        + (
+            f" (failed: {s['n_trials_failed']}, total recorded: {s['n_trials']})"
+            if s.get("n_trials_failed")
+            else ""
+        ),
         f"* CV: `{s['cv_type']}`, {s['cv_splits']} folds",
         f"* wall time: {s['wall_seconds'] / 60:.1f} min",
         f"* best trial: #{s['best_trial_number']}",
@@ -191,7 +196,8 @@ def per_jurisdiction_table(seg: str) -> str:
     path = REPORTS_DIR / seg / "holdout_by_jurisdiction.csv"
     if not path.exists():
         return "_holdout_by_jurisdiction.csv missing._\n"
-    rows = list(csv.DictReader(path.open()))
+    with path.open(newline="") as fh:
+        rows = list(csv.DictReader(fh))
     lines = [
         "| jurisdiction | holdout n | median actual (d) | MAE (d) | median AE (d) | bias (d) | interval coverage |",
         "|---|---:|---:|---:|---:|---:|---:|",
@@ -336,20 +342,21 @@ def scorecard() -> str:
         )
 
     mf = _read(REPORTS_DIR / "mlflow_runs_summary.json")
-    rows.append(
-        (
-            "MLflow runs",
-            "60+",
-            *(
-                (
-                    f"{mf['total_runs']}",
-                    "MET" if mf["total_runs"] >= RESUME_CLAIMS["mlflow_runs"] else "NOT MET",
-                )
-                if mf
-                else unmeasured("python -m scripts.export_mlflow_summary")
-            ),
+    if mf:
+        by_stage = mf.get("runs_by_stage", {})
+        detail = ", ".join(f"{v} {k}" for k, v in sorted(by_stage.items(), key=lambda kv: -kv[1]))
+        rows.append(
+            (
+                "MLflow runs",
+                "60+",
+                f"{mf['total_runs']} ({detail})",
+                "MET" if mf["total_runs"] >= RESUME_CLAIMS["mlflow_runs"] else "NOT MET",
+            )
         )
-    )
+    else:
+        rows.append(
+            ("MLflow runs", "60+", *unmeasured("python -m scripts.export_mlflow_summary"))
+        )
 
     lat = _read(REPORTS_DIR / "latency_inprocess_permit_to_completion.json")
     rows.append(
@@ -376,6 +383,53 @@ def scorecard() -> str:
     for label, claim, measured, verdict in rows:
         lines.append(f"| {label} | {claim} | {measured} | **{verdict}** |")
     return "\n".join(lines) + "\n"
+
+
+def partial_study_section() -> str:
+    """Report an Optuna study that was logged but never completed.
+
+    Discarding 136 real trials because the run was interrupted would waste
+    genuine evidence; presenting them as final results would be a lie. So they
+    are reported, loudly labelled INCOMPLETE, and the derived improvement is
+    computed against the same baseline the finished study would use.
+    """
+    mf = _read(REPORTS_DIR / "mlflow_runs_summary.json")
+    if not mf or not mf.get("top_trials_by_cv_mae"):
+        return ""
+    out: list[str] = []
+    for seg in SEGMENT_ORDER:
+        if _read(REPORTS_DIR / seg / "optuna_study.json"):
+            continue  # a completed study is reported properly elsewhere
+        trials = [t for t in mf["top_trials_by_cv_mae"] if t.get("segment") == seg]
+        if not trials:
+            continue
+        n = mf.get("runs_by_segment_and_stage", {}).get(seg, {}).get("optuna", 0)
+        best = min(trials, key=lambda t: t["cv_mae"])
+        bl = _read(REPORTS_DIR / seg / "baseline_results.json")
+        out += [
+            f"#### `{seg}` — INCOMPLETE study, {n} of 200 trials logged",
+            "",
+            "> These are real logged trials from a study that was **stopped before",
+            "> completing**. No final model was fitted from them and no holdout was",
+            "> scored, so they are *not* the project's results — they are a partial",
+            "> read on where a finished study would land.",
+            "",
+            "| | value |",
+            "|---|---:|",
+            f"| trials logged | {n} of 200 |",
+            f"| best trial CV MAE (days) | {best['cv_mae']:.3f} |",
+            f"| best trial CV R² | {best['cv_r2']:.4f} |",
+        ]
+        if bl:
+            d = bl["results"].get("xgb_default")
+            if d:
+                imp = 100.0 * (d["cv_mae"] - best["cv_mae"]) / d["cv_mae"]
+                out += [
+                    f"| stock XGBoost CV MAE (days) | {d['cv_mae']:.3f} |",
+                    f"| reduction in CV MAE so far | {imp:.1f}% |",
+                ]
+        out.append("")
+    return "\n".join(out)
 
 
 README_START = "<!-- RESULTS_TABLE -->"
@@ -422,11 +476,10 @@ def readme_block() -> str:
         parts += [
             "### Headline metrics (tuned models)",
             "",
-            "> **Not yet measured.** The 200-trial Optuna study and the final",
-            "> tuned models have not been run to completion in this working tree,",
-            "> so there are no tuned-model metrics, no MLflow run export, no",
-            "> latency distribution and no SHAP dashboard to report. Rather than",
-            "> print placeholder numbers, this section stays empty until",
+            "> **Not measured.** The 200-trial Optuna study was stopped before",
+            "> completing, so no tuned model was fitted, no holdout was scored,",
+            "> and there is no latency distribution or SHAP dashboard. Rather",
+            "> than print placeholder numbers this section stays empty until",
             "> `./scripts/run_pipeline.sh` has produced the artifacts, at which",
             "> point `python -m scripts.make_results_tables` fills it in.",
             "",
@@ -434,6 +487,10 @@ def readme_block() -> str:
             "segment on identical 5-fold splits, which is what the tuned model",
             "must be judged against.",
         ]
+
+    ps = partial_study_section()
+    if ps:
+        parts += ["", "### Partial Optuna study (incomplete)", "", ps]
 
     parts += [
         "",
@@ -521,6 +578,10 @@ def main() -> None:
             "",
         ]
     parts += [
+        "## Partial Optuna study",
+        "",
+        partial_study_section() or "_no partial study logged._\n",
+        "",
         "## MLflow tracking",
         "",
         mlflow_section(),

@@ -11,26 +11,29 @@ PY=${PY:-.venv/bin/python}
 TRIALS=${TRIALS:-200}
 SEGMENTS=${SEGMENTS:-"permit_to_completion application_to_issue"}
 
-echo "==> 1/7 ingest public permit + utility records"
+echo "==> 1/8 ingest public permit + utility records"
 $PY -m msa.ingest.build_dataset
 $PY -m scripts.report_horizon_coverage
 
 for SEG in $SEGMENTS; do
-  echo "==> 2/7 [$SEG] baselines (5-fold CV)"
+  echo "==> 2/8 [$SEG] baselines (5-fold CV)"
   $PY -m msa.train.baseline --segment "$SEG"
-  echo "==> 3/7 [$SEG] Optuna study ($TRIALS trials x 5-fold CV)"
+  echo "==> 3/8 [$SEG] Optuna study ($TRIALS trials x 5-fold CV)"
   $PY -m msa.train.tune --segment "$SEG" --trials "$TRIALS"
-  echo "==> 4/7 [$SEG] final model + MLflow registration"
+  echo "==> 4/8 [$SEG] final model + MLflow registration"
   $PY -m msa.train.final --segment "$SEG"
-  echo "==> 5/7 [$SEG] SHAP attribution dashboard"
+  echo "==> 5/8 [$SEG] SHAP attribution dashboard"
   $PY -m msa.explain.shap_report --segment "$SEG"
 done
 
-echo "==> 6/7 export MLflow run summary + benchmark the API"
+echo "==> 6/8 export MLflow run summary + benchmark the API"
 $PY -m scripts.export_mlflow_summary
 for SEG in $SEGMENTS; do $PY -m msa.bench.latency --segment "$SEG" --requests 2000; done
 
-echo "==> 7/7 regenerate docs/RESULTS.md from the measured artifacts"
+echo "==> 7/8 quantify the absolute-time-index ablation"
+$PY -m scripts.ablate_time_features
+
+echo "==> 8/8 regenerate docs/RESULTS.md from the measured artifacts"
 $PY -m scripts.make_results_tables
 
 echo

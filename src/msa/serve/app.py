@@ -55,6 +55,11 @@ LOG = logging.getLogger(__name__)
 SEGMENT = os.environ.get("MSA_SERVE_SEGMENT", DEFAULT_SEGMENT)
 TOP_ATTRIBUTIONS = 8
 
+#: TreeSHAP over a full batch is far more expensive than prediction, so
+#: ``?explain=true`` is only honoured for batches up to this size. Larger
+#: batches still return predictions; they just do not carry attributions.
+MAX_EXPLAIN_BATCH = 50
+
 
 class ModelBundle:
     """Everything needed to answer a request, loaded once."""
@@ -106,9 +111,11 @@ def request_frame(items: list[PermitRequest], bundle: ModelBundle) -> pd.DataFra
     """Turn request bodies into the exact feature matrix the booster expects."""
     raw = pd.DataFrame([i.model_dump() for i in items])
     raw["start_date"] = pd.to_datetime(raw["start_date"])
-    raw["source"] = "api"
     raw["jurisdiction"] = raw["jurisdiction"].astype("string")
 
+    # `source` is filled in by the feature store from the jurisdiction, so that
+    # the categorical level matches one the booster was trained on. An unknown
+    # jurisdiction leaves it missing, which is the honest encoding.
     frame = apply_store(raw, bundle.store)
 
     d = frame["start_date"]
@@ -179,6 +186,7 @@ def create_app(segment: str = SEGMENT, root: Path = MODELS_DIR) -> FastAPI:
 
         # TreeSHAP is computed once for the whole frame; calling it per row
         # would make an explained batch quadratic in the batch size.
+        explain = explain and len(X) <= MAX_EXPLAIN_BATCH
         shap_values = (
             np.asarray(bundle.explainer.shap_values(X)) if explain else None
         )
@@ -247,7 +255,10 @@ def create_app(segment: str = SEGMENT, root: Path = MODELS_DIR) -> FastAPI:
         except Exception as exc:  # noqa: BLE001
             counters["errors"] += 1
             LOG.exception("prediction failed")
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
+            # the traceback goes to the log, not to the caller
+            raise HTTPException(
+                status_code=500, detail="prediction failed"
+            ) from exc
         latencies.append((time.perf_counter() - t0) * 1000.0)
         counters["predict"] += 1
         return result
@@ -263,7 +274,9 @@ def create_app(segment: str = SEGMENT, root: Path = MODELS_DIR) -> FastAPI:
         except Exception as exc:  # noqa: BLE001
             counters["errors"] += 1
             LOG.exception("batch prediction failed")
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
+            raise HTTPException(
+                status_code=500, detail="batch prediction failed"
+            ) from exc
         latencies.append((time.perf_counter() - t0) * 1000.0)
         counters["predict_batch"] += 1
         return BatchResponse(predictions=results)

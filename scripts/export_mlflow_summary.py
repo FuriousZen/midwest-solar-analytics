@@ -40,12 +40,19 @@ def export() -> dict:
             "no MLflow runs found -- run the training pipeline before exporting"
         )
 
-    keep = [c for c in runs.columns if not c.startswith("params.") or True]
-    runs = runs[keep]
     runs.to_csv(CSV_PATH, index=False)
 
-    stage = runs.get("tags.stage", pd.Series(dtype=str)).fillna("untagged")
-    segment = runs.get("tags.segment", pd.Series(dtype=str)).fillna("n/a")
+    # A tag column only exists once at least one run carried that tag. Falling
+    # back to an empty Series would produce a length-0 object that blows up
+    # crosstab and boolean indexing, killing the pipeline at this step; build a
+    # correctly-sized default instead.
+    def tag(name: str, default: str) -> pd.Series:
+        if f"tags.{name}" in runs.columns:
+            return runs[f"tags.{name}"].fillna(default).astype(str)
+        return pd.Series([default] * len(runs), index=runs.index, dtype=str)
+
+    stage = tag("stage", "untagged")
+    segment = tag("segment", "n/a")
 
     by_stage = stage.value_counts().to_dict()
     by_segment_stage = (
@@ -53,9 +60,10 @@ def export() -> dict:
     )
 
     best_rows = []
-    if "metrics.cv_mae" in runs.columns:
-        trials = runs[stage == "optuna"].copy()
-        for seg, sub in trials.groupby(segment[stage == "optuna"]):
+    is_trial = stage == "optuna"
+    if "metrics.cv_mae" in runs.columns and is_trial.any():
+        trials = runs[is_trial].copy()
+        for seg, sub in trials.groupby(segment[is_trial]):
             top = sub.nsmallest(5, "metrics.cv_mae")
             for _, r in top.iterrows():
                 best_rows.append(

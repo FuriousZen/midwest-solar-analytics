@@ -56,8 +56,8 @@ CATEGORICAL_FEATURES: tuple[str, ...] = (
 # deliberately EXCLUDED. They let the booster memorise the level of each
 # historical period, which inflates random-fold CV but collapses on a
 # chronological holdout because the value is out of range for future permits.
-# Measured effect on the chronological test set: R2 -0.10 -> +0.17 for stock
-# XGBoost when they are removed (see reports/ablation_time_features.json).
+# `python -m scripts.ablate_time_features` quantifies this on the current corpus
+# and writes reports/ablation_time_features.json; run it before quoting a figure.
 NUMERIC_FEATURES: tuple[str, ...] = (
     "system_size_kw",
     "log_system_size_kw",

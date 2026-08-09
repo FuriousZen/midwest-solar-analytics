@@ -39,8 +39,8 @@ PREFIX = "tracking-the-sun"
 EDITION = "2024"
 
 #: Midwest states present in the 2024 edition of the public file.
-#: (IN, IA, MI, NE, ND, SD are not reported; KS/MO appear only in the 2020
-#: edition. Verified by listing the bucket -- see scripts/verify_tts_states.py)
+#: (IN, IA, MI, NE, ND, SD are not reported; KS/MO appear only in the 2018-2020
+#: editions. Verified by listing the bucket -- `python -m scripts.verify_tts_states`)
 TTS_MIDWEST_STATES: tuple[str, ...] = ("IL", "MN", "OH", "WI")
 
 USE_COLS = [

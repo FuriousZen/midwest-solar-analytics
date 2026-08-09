@@ -1,0 +1,61 @@
+{
+  "experiment": "midwest-solar-timeline",
+  "total_runs": 145,
+  "runs_by_stage": {
+    "optuna": 136,
+    "baseline": 8,
+    "optuna-parent": 1
+  },
+  "runs_by_segment_and_stage": {
+    "application_to_issue": {
+      "baseline": 4,
+      "optuna": 0,
+      "optuna-parent": 0
+    },
+    "permit_to_completion": {
+      "baseline": 4,
+      "optuna": 136,
+      "optuna-parent": 1
+    }
+  },
+  "first_run_started": "2026-08-09 00:17:22.862000+00:00",
+  "last_run_started": "2026-08-09 00:51:56.362000+00:00",
+  "top_trials_by_cv_mae": [
+    {
+      "segment": "permit_to_completion",
+      "run_name": "optuna-trial-128",
+      "cv_mae": 38.475532137496224,
+      "cv_r2": 0.3364312282157975,
+      "cv_rmse": 62.40628454722045
+    },
+    {
+      "segment": "permit_to_completion",
+      "run_name": "optuna-trial-132",
+      "cv_mae": 38.55522813764198,
+      "cv_r2": 0.3342035529380254,
+      "cv_rmse": 62.51094924918058
+    },
+    {
+      "segment": "permit_to_completion",
+      "run_name": "optuna-trial-133",
+      "cv_mae": 38.67240612844334,
+      "cv_r2": 0.33258601648959407,
+      "cv_rmse": 62.58683760846941
+    },
+    {
+      "segment": "permit_to_completion",
+      "run_name": "optuna-trial-094",
+      "cv_mae": 38.673595903728156,
+      "cv_r2": 0.33131855104706276,
+      "cv_rmse": 62.646237793211874
+    },
+    {
+      "segment": "permit_to_completion",
+      "run_name": "optuna-trial-069",
+      "cv_mae": 38.68643413256631,
+      "cv_r2": 0.3290402016725492,
+      "cv_rmse": 62.75287200985719
+    }
+  ],
+  "run_table_csv": "reports/mlflow_runs.csv"
+}

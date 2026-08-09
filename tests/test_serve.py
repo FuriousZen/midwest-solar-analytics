@@ -309,3 +309,59 @@ def test_response_is_strict_json_with_no_nan(client):
             AssertionError(f"non-finite token {c!r} in response")
         ),
     )
+
+
+def test_unknown_keys_stay_missing_rather_than_becoming_average(model_root):
+    """Training encoded 'no history' as NaN; serving must not fill a median.
+
+    Filling the training median would tell the booster an unknown contractor is
+    an *average* contractor, which is a different and more confident claim.
+    """
+    bundle = ModelBundle(SEGMENT, root=model_root)
+    rows = pd.DataFrame(
+        [
+            {
+                "jurisdiction": "Nowhere-on-Sea",
+                "state": "ZZ",
+                "contractor": "NEVER HEARD OF THEM",
+                "zip_code": "00000",
+            }
+        ]
+    )
+    out = apply_store(rows, bundle.store)
+    for col in (
+        "contractor_prior_permits",
+        "contractor_prior_mean_days",
+        "jurisdiction_open_permits",
+        "tts_zip_cum_installs",
+        "tts_state_installs_prev_365d",
+    ):
+        assert pd.isna(out.loc[0, col]), f"{col} should be missing, got {out.loc[0, col]}"
+    assert out.loc[0, "contractor_is_known"] == 0
+
+
+def test_source_level_is_replayed_from_the_jurisdiction(model_root):
+    """`source` is a trained categorical level; a literal 'api' is not one."""
+    bundle = ModelBundle(SEGMENT, root=model_root)
+    X = request_frame([PermitRequest(**BODY)], bundle)
+    assert str(X["source"].iloc[0]) in bundle.categories["source"]
+
+    unknown = request_frame(
+        [PermitRequest(**dict(BODY, jurisdiction="Nowhere-on-Sea"))], bundle
+    )
+    assert pd.isna(unknown["source"].iloc[0])
+
+
+def test_explain_is_capped_on_large_batches(client):
+    from msa.serve.app import MAX_EXPLAIN_BATCH
+
+    big = {"items": [BODY] * (MAX_EXPLAIN_BATCH + 5)}
+    r = client.post("/predict/batch?explain=true", json=big)
+    assert r.status_code == 200
+    preds = r.json()["predictions"]
+    assert len(preds) == MAX_EXPLAIN_BATCH + 5
+    assert all(p["attributions"] is None for p in preds)
+
+    small = {"items": [BODY] * 3}
+    r2 = client.post("/predict/batch?explain=true", json=small)
+    assert all(p["attributions"] for p in r2.json()["predictions"])

@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 from xgboost import XGBRegressor
 
-from msa.config import RANDOM_SEED, REPORTS_DIR, SEGMENTS
+from msa.config import RANDOM_SEED, REPORTS_DIR
 from msa.train.baseline import make_cv
 from msa.train.data import load_dataset
 from msa.train.metrics import regression_metrics

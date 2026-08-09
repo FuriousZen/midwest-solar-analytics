@@ -252,8 +252,11 @@ def run(segment: str, log_to_mlflow: bool = True) -> dict:
     qmodel = fit_quantiles(ds, params, log_target)
     q_test = predict_quantiles(qmodel, ds.X_test, log_target, horizon)
     raw_lo, mid, raw_hi = q_test[:, 0], q_test[:, 1], q_test[:, 2]
-    lo = np.clip(raw_lo - conformal_delta, 0.0, None)
-    hi = raw_hi + conformal_delta
+    # Clip exactly as msa.serve.app does, so the coverage reported here is the
+    # coverage of the interval a caller actually receives -- not of a wider,
+    # unclipped one that only exists during evaluation.
+    lo = np.clip(raw_lo - conformal_delta, 0.0, horizon)
+    hi = np.clip(raw_hi + conformal_delta, 0.0, horizon)
     y_true = ds.y_test.to_numpy()
     covered = (y_true >= lo) & (y_true <= hi)
     interval = {

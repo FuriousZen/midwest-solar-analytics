@@ -96,12 +96,12 @@ def build(segment: str, max_rows: int = MAX_EXPLAIN_ROWS) -> Path:
 
     images: dict[str, str] = {}
 
-    fig = plt.figure(figsize=(9, 8))
+    plt.figure(figsize=(9, 8))
     shap.plots.beeswarm(expl, max_display=20, show=False)
     plt.title(f"SHAP attributions -- {segment} ({unit})", fontsize=11)
     images["beeswarm"] = _save(plt.gcf(), out / "shap_beeswarm.png")
 
-    fig = plt.figure(figsize=(9, 7))
+    plt.figure(figsize=(9, 7))
     shap.plots.bar(expl, max_display=20, show=False)
     plt.title(f"Mean |SHAP| -- {segment} ({unit})", fontsize=11)
     images["bar"] = _save(plt.gcf(), out / "shap_bar.png")

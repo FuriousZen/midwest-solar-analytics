@@ -85,8 +85,10 @@ Two filters are applied before modelling, both in `msa/features/build.py::clean`
   `https://oedi-data-lake.s3.amazonaws.com/tracking-the-sun/2024/state=<XX>/`,
   anonymous HTTPS, Hive-partitioned by edition and state.
 * **Midwest coverage in the 2024 edition**: IL, MN, OH, WI only — **98,275
-  systems**. (IN, IA, MI, NE, ND, SD are not published; KS and MO appear only
-  in the 2020 edition. Verified by listing the bucket.)
+  systems**. (IN, IA, MI, NE, ND, SD are not published at all; KS and MO appear
+  only in the 2018-2020 editions. Verified by listing the bucket --
+  `python -m scripts.verify_tts_states`, output in
+  `reports/tts_state_coverage.json`.)
 
 **Critical limitation, verified not assumed:** the public Tracking the Sun file
 contains exactly **one** date column, `installation_date`. It therefore cannot

@@ -13,8 +13,6 @@ from __future__ import annotations
 import json
 import logging
 
-import pandas as pd
-
 from msa.config import REPORTS_DIR, SEGMENTS, max_timeline_days
 from msa.train.data import load_raw
 

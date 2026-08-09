@@ -79,7 +79,16 @@ class PermitRequest(BaseModel):
 
 
 class BatchRequest(BaseModel):
-    items: list[PermitRequest] = Field(..., min_length=1, max_length=1000)
+    items: list[PermitRequest] = Field(
+        ...,
+        min_length=1,
+        max_length=1000,
+        description=(
+            "Up to 1000 projects. `?explain=true` is only honoured for batches "
+            "of 50 or fewer -- TreeSHAP over a large batch costs far more than "
+            "the prediction itself."
+        ),
+    )
 
 
 class Attribution(BaseModel):

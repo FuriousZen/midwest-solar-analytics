@@ -71,29 +71,31 @@ def build_store(X: pd.DataFrame, meta: pd.DataFrame, raw: pd.DataFrame) -> dict:
     order = meta["start_date"]
     raw = raw.set_index("record_id").reindex(meta["record_id"]).reset_index()
 
+    # `source` is a trained categorical level. Serving used to stamp a literal
+    # "api", which is not a level the booster ever saw, so every request silently
+    # landed in the missing branch of that split. Learn the jurisdiction -> source
+    # mapping instead and replay it at request time.
+    juris_source = (
+        pd.DataFrame(
+            {"jurisdiction": meta["jurisdiction"].to_numpy(), "source": raw["source"].to_numpy()}
+        )
+        .dropna()
+        .groupby("jurisdiction")["source"]
+        .agg(lambda s: s.mode().iat[0] if len(s.mode()) else None)
+        .dropna()
+        .to_dict()
+    )
+
     store = {
         "as_of": str(pd.Timestamp(order.max()).date()),
         "n_rows": int(len(X)),
+        "jurisdiction_source": {str(k): str(v) for k, v in juris_source.items()},
         "contractor": _last_by(X, raw["contractor"], CONTRACTOR_FEATURES, order),
         "jurisdiction": _last_by(
             X, meta["jurisdiction"], JURISDICTION_FEATURES, order
         ),
         "zip": _last_by(X, raw["zip_code"], ZIP_FEATURES, order),
         "state": _last_by(X, meta["state"], STATE_FEATURES, order),
-    }
-    # global fallbacks: the median of each context feature across training
-    store["defaults"] = {
-        c: (None if pd.isna(v) else float(v))
-        for c, v in X[
-            list(
-                CONTRACTOR_FEATURES
-                + JURISDICTION_FEATURES
-                + ZIP_FEATURES
-                + STATE_FEATURES
-            )
-        ]
-        .median()
-        .items()
     }
     LOG.info(
         "feature store: %d contractors, %d jurisdictions, %d zips, as of %s",
@@ -121,19 +123,26 @@ def apply_store(rows: pd.DataFrame, store: dict) -> pd.DataFrame:
     ``zip_code`` columns (any of which may be null).
     """
     out = rows.copy()
-    defaults = store.get("defaults", {})
 
     def lookup(table: str, key_col: str, cols: tuple[str, ...]) -> None:
+        """Replay stored context, or leave it MISSING.
+
+        An unmatched key must yield NaN, not the training median. Training
+        encoded "no history" as NaN (see ``_contractor_features``), so filling a
+        median here would tell the booster that an unknown contractor is an
+        *average* contractor -- a different, and more confident, claim than the
+        one the model was trained to handle. XGBoost has a learned missing
+        branch for exactly this case; use it.
+        """
         tbl = store.get(table, {})
         keys = out[key_col].astype("string") if key_col in out else pd.Series(
             [None] * len(out)
         )
         for c in cols:
-            fallback = defaults.get(c)
             out[c] = [
-                (tbl.get(str(k), {}) or {}).get(c, fallback)
+                (tbl.get(str(k), {}) or {}).get(c, np.nan)
                 if k is not None and not pd.isna(k)
-                else fallback
+                else np.nan
                 for k in keys
             ]
 
@@ -141,6 +150,13 @@ def apply_store(rows: pd.DataFrame, store: dict) -> pd.DataFrame:
     lookup("jurisdiction", "jurisdiction", JURISDICTION_FEATURES)
     lookup("zip", "zip_code", ZIP_FEATURES)
     lookup("state", "state", STATE_FEATURES)
+
+    # replay the training-time `source` level for this jurisdiction
+    juris_source = store.get("jurisdiction_source", {})
+    if juris_source:
+        out["source"] = [
+            juris_source.get(str(j)) for j in out.get("jurisdiction", pd.Series(dtype=str))
+        ]
 
     known = set(store.get("contractor", {}))
     out["contractor_is_known"] = [
