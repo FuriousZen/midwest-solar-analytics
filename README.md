@@ -6,14 +6,21 @@ municipal open-data registers across eight Midwest states, plus utility
 interconnection records from LBNL's *Tracking the Sun*.
 
 XGBoost regression · Optuna (200 trials, 5-fold CV) · MLflow tracking ·
-SHAP attribution dashboard · FastAPI prediction service with measured p95 latency.
+SHAP attribution dashboard · FastAPI prediction service with a latency benchmark.
 
-> **All numbers in this README are measured, not aspirational.**
-> Every figure is generated from artifacts in `reports/` by
-> `python -m scripts.make_results_tables`, and each has a command you can run to
-> reproduce it. Where the results fall short of what was hoped for, they say so.
-> See **[docs/RESULTS.md](docs/RESULTS.md)** for the full tables and
-> **[Honest assessment](#honest-assessment)** below for the shortfalls.
+> **Every number in this README is machine-generated from artifacts in
+> `reports/` by `python -m scripts.make_results_tables`.** Nothing is typed in
+> by hand, so a figure cannot drift from what was actually measured, and a claim
+> whose artifact does not exist is printed as **NOT MEASURED** rather than
+> quietly omitted.
+>
+> **Current status:** the data pipeline, the feature layer, the four baselines,
+> the serving stack and the test suite are built and measured. The 200-trial
+> Optuna study was **not run to completion** in this working tree, so the tuned
+> model, the MLflow run export, the latency distribution and the SHAP dashboard
+> are unmeasured — see the scorecard below and
+> **[Honest assessment](#honest-assessment)**. `./scripts/run_pipeline.sh`
+> produces all of it.
 
 ---
 
@@ -66,20 +73,49 @@ make bench                      # latency distribution
 | claim | résumé says | measured | verdict |
 |---|---|---|---|
 | dataset size | 8,000+ historical installations | 29,425 permit records; 12,108 with an installation duration, 21,884 with a review duration | **MET** |
+| R² (model A, 5-fold CV) | 0.86 | not measured — run `make tune final SEGMENT=permit_to_completion` | **NOT MEASURED** |
+| MAE (model A, 5-fold CV) | 4.2 days | not measured — run `make tune final SEGMENT=permit_to_completion` | **NOT MEASURED** |
+| improvement over baseline (model A) | 23% | not measured — run `make tune final SEGMENT=permit_to_completion` | **NOT MEASURED** |
+| R² (model B, 5-fold CV) | 0.86 | not measured — run `make tune final SEGMENT=application_to_issue` | **NOT MEASURED** |
+| MAE (model B, 5-fold CV) | 4.2 days | not measured — run `make tune final SEGMENT=application_to_issue` | **NOT MEASURED** |
+| improvement over baseline (model B) | 23% | not measured — run `make tune final SEGMENT=application_to_issue` | **NOT MEASURED** |
+| MLflow runs | 60+ | not measured — run `python -m scripts.export_mlflow_summary` | **NOT MEASURED** |
+| p95 inference latency | < 50 ms | not measured — run `make bench` | **NOT MEASURED** |
 
 
-### Headline metrics
+### Headline metrics (tuned models)
 
-| | Model A — installation timeline | Model B — permit review |
-|---|---:|---:|
-| training rows | — | — |
-| 5-fold CV MAE (days) | — | — |
-| 5-fold CV RMSE (days) | — | — |
-| 5-fold CV R² | — | — |
-| chronological holdout MAE (days) | — | — |
-| chronological holdout R² | — | — |
-| improvement vs stock XGBoost (CV MAE) | — | — |
-| 80% interval coverage on holdout | — | — |
+> **Not yet measured.** The 200-trial Optuna study and the final
+> tuned models have not been run to completion in this working tree,
+> so there are no tuned-model metrics, no MLflow run export, no
+> latency distribution and no SHAP dashboard to report. Rather than
+> print placeholder numbers, this section stays empty until
+> `./scripts/run_pipeline.sh` has produced the artifacts, at which
+> point `python -m scripts.make_results_tables` fills it in.
+
+What **is** measured is the baseline layer below — four models per
+segment on identical 5-fold splits, which is what the tuned model
+must be judged against.
+
+### Measured baselines
+
+`permit_to_completion` — 8,117 train / 2,045 holdout, 5-fold CV, seed 20250201
+
+| model | CV MAE (d) | CV R² | holdout MAE (d) | holdout R² |
+|---|---:|---:|---:|---:|
+| `global_median` | 53.302 | -0.1216 | 47.118 | -0.1323 |
+| `group_median` | 47.618 | 0.1021 | 45.621 | -0.0297 |
+| `ridge` | 47.059 | 0.2750 | 48.628 | 0.0517 |
+| `xgb_default` | 43.419 | 0.3108 | 64.310 | -0.5201 |
+
+`application_to_issue` — 16,684 train / 4,194 holdout, 5-fold CV, seed 20250201
+
+| model | CV MAE (d) | CV R² | holdout MAE (d) | holdout R² |
+|---|---:|---:|---:|---:|
+| `global_median` | 9.497 | -0.0652 | 10.043 | -0.1087 |
+| `group_median` | 7.862 | 0.2029 | 9.428 | 0.0840 |
+| `ridge` | 7.119 | 0.3645 | 8.333 | 0.3247 |
+| `xgb_default` | 6.114 | 0.4368 | 10.707 | 0.0817 |
 
 Full tables, per-jurisdiction breakdowns, the Optuna study and the
 latency distribution: **[docs/RESULTS.md](docs/RESULTS.md)**.
@@ -213,7 +249,60 @@ values on a gradient-boosted tree, not an approximation.
 
 ## Honest assessment
 
-<!-- HONEST_ASSESSMENT -->
+### What is measured, and what is not
+
+| Component | Status |
+|---|---|
+| 29,425-record Midwest solar permit corpus, 12 jurisdictions, 8 states | **measured** — `data/processed/dataset_summary.json` |
+| Horizon coverage / censoring analysis | **measured** — `reports/horizon_coverage.json` |
+| Four baselines per segment, identical 5-fold splits | **measured** — `reports/<segment>/baseline_results.json` |
+| Test suite (50 tests, incl. 5 leakage tests) | **measured** — `make test` |
+| 200-trial Optuna study, tuned model, MLflow export, latency p95, SHAP dashboard | **not measured in this tree** — `./scripts/run_pipeline.sh` |
+
+The study was started three times and stopped three times: twice deliberately
+(a leakage bug and a look-ahead bug were found mid-run and the affected trials
+had to be discarded), once by a crash at trial 185 of 200 when a `log1p`-target
+booster produced a score whose `expm1` overflowed to `+inf`. All three causes
+are fixed and pinned by tests; the study is now also resumable
+(`sqlite:///optuna.db`) so a future interruption costs minutes rather than an
+hour. It was then stopped a fourth time on request, before completing.
+
+### What the baselines already tell us about the résumé's numbers
+
+These are real measurements, and they set the range the tuned model will land in:
+
+* **Model B** (permit review, application → issue): stock XGBoost gets
+  **CV MAE 6.11 days, CV R² 0.437**. Tuning moves numbers like this by single-digit
+  percent, so a **4.2-day MAE is plausibly reachable; R² = 0.86 is not.**
+* **Model A** (installation timeline, permit → completion): stock XGBoost gets
+  **CV MAE 43.4 days, CV R² 0.311**. This target is dominated by administrative
+  permit-closure lag, and **neither 4.2 days nor R² = 0.86 is reachable** — it is
+  off by an order of magnitude on MAE.
+
+So on current evidence the résumé's **R² = 0.86 will not be met by either
+model**, and the **4.2-day MAE is only meaningful for the permit-review
+segment**, not for the installation timeline the line describes. The scorecard
+above will record whichever verdict the completed study produces.
+
+### Known weaknesses
+
+* **The target is noisy by nature.** A permit's "completion" date is when an
+  inspector closed the record, which can lag physical completion by months. Much
+  of the residual is administrative, not physical, and no feature set fixes that.
+* **Stock XGBoost overfits the chronological holdout badly** (Model A holdout
+  R² = −0.52 against CV R² = 0.31). That gap is precisely what the Optuna study
+  exists to close, and it is unclosed until the study is run.
+* **Jurisdiction coverage is lopsided.** Chicago is 44% of the corpus and
+  Bismarck contributes 16 records; the small registers cannot support
+  per-jurisdiction conclusions.
+* **Solar is identified from free-text scope of work** in most registers. The
+  matcher is recall-first with an explicit non-PV veto list, which is the right
+  trade-off here, but it is not a coded work class in most cities.
+* **Tracking the Sun coverage ends 2024-03** and covers only IL/MN/OH/WI, so its
+  context features saturate for recent permits in other states.
+* **The feature store is a snapshot,** not a live store. Contractor and
+  jurisdiction context are frozen at training time; `/metadata` reports
+  `feature_store_as_of` so staleness is visible rather than silent.
 
 ---
 

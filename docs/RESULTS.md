@@ -9,6 +9,14 @@ none of it is typed by hand._
 | claim | résumé says | measured | verdict |
 |---|---|---|---|
 | dataset size | 8,000+ historical installations | 29,425 permit records; 12,108 with an installation duration, 21,884 with a review duration | **MET** |
+| R² (model A, 5-fold CV) | 0.86 | not measured — run `make tune final SEGMENT=permit_to_completion` | **NOT MEASURED** |
+| MAE (model A, 5-fold CV) | 4.2 days | not measured — run `make tune final SEGMENT=permit_to_completion` | **NOT MEASURED** |
+| improvement over baseline (model A) | 23% | not measured — run `make tune final SEGMENT=permit_to_completion` | **NOT MEASURED** |
+| R² (model B, 5-fold CV) | 0.86 | not measured — run `make tune final SEGMENT=application_to_issue` | **NOT MEASURED** |
+| MAE (model B, 5-fold CV) | 4.2 days | not measured — run `make tune final SEGMENT=application_to_issue` | **NOT MEASURED** |
+| improvement over baseline (model B) | 23% | not measured — run `make tune final SEGMENT=application_to_issue` | **NOT MEASURED** |
+| MLflow runs | 60+ | not measured — run `python -m scripts.export_mlflow_summary` | **NOT MEASURED** |
+| p95 inference latency | < 50 ms | not measured — run `make bench` | **NOT MEASURED** |
 
 
 ## Dataset

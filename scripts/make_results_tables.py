@@ -279,11 +279,26 @@ def scorecard() -> str:
             )
         )
 
+    # A claim whose artifact is absent must be reported as NOT MEASURED, not
+    # silently dropped from the table. Omission reads as "fine" to a skimmer;
+    # that is exactly the failure mode this scorecard exists to prevent.
+    def unmeasured(cmd: str) -> tuple[str, str]:
+        return (f"not measured — run `{cmd}`", "NOT MEASURED")
+
     for seg in SEGMENT_ORDER:
-        m = _read(REPORTS_DIR / seg / "final_metrics.json")
-        if not m:
-            continue
         tag = "A" if seg == "permit_to_completion" else "B"
+        m = _read(REPORTS_DIR / seg / "final_metrics.json")
+        cmd = f"make tune final SEGMENT={seg}"
+
+        if not m:
+            for label, claim in (
+                (f"R² (model {tag}, 5-fold CV)", "0.86"),
+                (f"MAE (model {tag}, 5-fold CV)", "4.2 days"),
+                (f"improvement over baseline (model {tag})", "23%"),
+            ):
+                rows.append((label, claim, *unmeasured(cmd)))
+            continue
+
         r2 = m.get("cv_r2")
         mae = m.get("cv_mae")
         rows.append(
@@ -302,7 +317,9 @@ def scorecard() -> str:
                 "MET" if mae is not None and mae <= RESUME_CLAIMS["mae_days"] else "NOT MET",
             )
         )
-        imp = m.get("improvement_vs_default_cv_mae_pct")
+        imp = m.get("improvement_vs_xgb_default_cv_mae_pct") or m.get(
+            "improvement_vs_default_cv_mae_pct"
+        )
         naive_imp = m.get("improvement_vs_global_median_cv_mae_pct")
         extra = (
             f" (vs the naive median baseline: {naive_imp:.1f}%)"
@@ -319,27 +336,38 @@ def scorecard() -> str:
         )
 
     mf = _read(REPORTS_DIR / "mlflow_runs_summary.json")
-    if mf:
-        rows.append(
-            (
-                "MLflow runs",
-                "60+",
-                f"{mf['total_runs']}",
-                "MET" if mf["total_runs"] >= RESUME_CLAIMS["mlflow_runs"] else "NOT MET",
-            )
+    rows.append(
+        (
+            "MLflow runs",
+            "60+",
+            *(
+                (
+                    f"{mf['total_runs']}",
+                    "MET" if mf["total_runs"] >= RESUME_CLAIMS["mlflow_runs"] else "NOT MET",
+                )
+                if mf
+                else unmeasured("python -m scripts.export_mlflow_summary")
+            ),
         )
+    )
 
     lat = _read(REPORTS_DIR / "latency_inprocess_permit_to_completion.json")
-    if lat:
-        p95 = lat["single_request"]["p95_ms"]
-        rows.append(
-            (
-                "p95 inference latency",
-                "< 50 ms",
-                f"{p95:.2f} ms",
-                "MET" if p95 < RESUME_CLAIMS["p95_ms"] else "NOT MET",
-            )
+    rows.append(
+        (
+            "p95 inference latency",
+            "< 50 ms",
+            *(
+                (
+                    f"{lat['single_request']['p95_ms']:.2f} ms",
+                    "MET"
+                    if lat["single_request"]["p95_ms"] < RESUME_CLAIMS["p95_ms"]
+                    else "NOT MET",
+                )
+                if lat
+                else unmeasured("make bench")
+            ),
         )
+    )
 
     lines = [
         "| claim | résumé says | measured | verdict |",
@@ -362,29 +390,75 @@ def readme_block() -> str:
         "",
         scorecard(),
         "",
-        "### Headline metrics",
-        "",
-        "| | Model A — installation timeline | Model B — permit review |",
-        "|---|---:|---:|",
     ]
+
     a = _read(REPORTS_DIR / "permit_to_completion" / "final_metrics.json") or {}
     b = _read(REPORTS_DIR / "application_to_issue" / "final_metrics.json") or {}
 
-    def row(label, key, nd=3, pct=False):
-        va, vb = a.get(key), b.get(key)
-        f = lambda v: ("—" if v is None else (f"{v:.{nd}f}" + ("%" if pct else "")))
-        parts.append(f"| {label} | {f(va)} | {f(vb)} |")
+    if a or b:
+        parts += [
+            "### Headline metrics (tuned models)",
+            "",
+            "| | Model A — installation timeline | Model B — permit review |",
+            "|---|---:|---:|",
+        ]
 
-    row("training rows", "n_train")
-    row("5-fold CV MAE (days)", "cv_mae", 2)
-    row("5-fold CV RMSE (days)", "cv_rmse", 2)
-    row("5-fold CV R²", "cv_r2", 4)
-    row("chronological holdout MAE (days)", "test_mae", 2)
-    row("chronological holdout R²", "test_r2", 4)
-    row("improvement vs stock XGBoost (CV MAE)", "improvement_vs_default_cv_mae_pct", 1, True)
-    row("80% interval coverage on holdout", "interval_empirical_coverage_test", 3)
+        def row(label, key, nd=3, pct=False):
+            va, vb = a.get(key), b.get(key)
+            f = lambda v: (
+                "not measured" if v is None else (f"{v:.{nd}f}" + ("%" if pct else ""))
+            )
+            parts.append(f"| {label} | {f(va)} | {f(vb)} |")
+
+        row("training rows", "n_train")
+        row("5-fold CV MAE (days)", "cv_mae", 2)
+        row("5-fold CV RMSE (days)", "cv_rmse", 2)
+        row("5-fold CV R²", "cv_r2", 4)
+        row("chronological holdout MAE (days)", "test_mae", 2)
+        row("chronological holdout R²", "test_r2", 4)
+        row("improvement vs stock XGBoost (CV MAE)", "improvement_vs_xgb_default_cv_mae_pct", 1, True)
+        row("80% interval coverage on holdout", "interval_empirical_coverage_test", 3)
+    else:
+        parts += [
+            "### Headline metrics (tuned models)",
+            "",
+            "> **Not yet measured.** The 200-trial Optuna study and the final",
+            "> tuned models have not been run to completion in this working tree,",
+            "> so there are no tuned-model metrics, no MLflow run export, no",
+            "> latency distribution and no SHAP dashboard to report. Rather than",
+            "> print placeholder numbers, this section stays empty until",
+            "> `./scripts/run_pipeline.sh` has produced the artifacts, at which",
+            "> point `python -m scripts.make_results_tables` fills it in.",
+            "",
+            "What **is** measured is the baseline layer below — four models per",
+            "segment on identical 5-fold splits, which is what the tuned model",
+            "must be judged against.",
+        ]
+
     parts += [
         "",
+        "### Measured baselines",
+        "",
+    ]
+    for seg in SEGMENT_ORDER:
+        bl = _read(REPORTS_DIR / seg / "baseline_results.json")
+        if not bl:
+            continue
+        parts += [
+            f"`{seg}` — {bl['n_train']:,} train / {bl['n_test']:,} holdout, "
+            f"{bl['cv_splits']}-fold CV, seed {bl['seed']}",
+            "",
+            "| model | CV MAE (d) | CV R² | holdout MAE (d) | holdout R² |",
+            "|---|---:|---:|---:|---:|",
+        ]
+        for name, m in bl["results"].items():
+            parts.append(
+                f"| `{name}` | {m['cv_mae']:.3f} | {m['cv_r2']:.4f} | "
+                f"{m['test_mae']:.3f} | {m['test_r2']:.4f} |"
+            )
+        parts.append("")
+
+    parts += [
         "Full tables, per-jurisdiction breakdowns, the Optuna study and the",
         "latency distribution: **[docs/RESULTS.md](docs/RESULTS.md)**.",
         "",
