@@ -5,6 +5,7 @@
     "application_to_issue": 21884,
     "application_to_completion": 5960
   },
+  "failed_sources": {},
   "sources": [
     {
       "source": "ames_permits",

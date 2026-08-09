@@ -7,7 +7,7 @@
   "n_trials_failed": 1,
   "cv_splits": 5,
   "cv_type": "KFold(shuffle=True, random_state=20250201)",
-  "wall_seconds": 0.11221474999911152,
+  "wall_seconds": 0.09146741699805716,
   "n_train": 8117,
   "best_trial_number": 128,
   "best_cv_mae": 38.475532137496224,
