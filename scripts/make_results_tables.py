@@ -300,11 +300,17 @@ def scorecard() -> str:
             )
         )
         imp = m.get("improvement_vs_default_cv_mae_pct")
+        naive_imp = m.get("improvement_vs_global_median_cv_mae_pct")
+        extra = (
+            f" (vs the naive median baseline: {naive_imp:.1f}%)"
+            if naive_imp is not None
+            else ""
+        )
         rows.append(
             (
                 f"improvement over baseline (model {tag})",
                 "23%",
-                f"{fmt(imp, 1)}% lower CV MAE vs stock XGBoost",
+                f"{fmt(imp, 1)}% lower CV MAE vs stock XGBoost{extra}",
                 "MET" if imp is not None and imp >= RESUME_CLAIMS["improvement_pct"] else "NOT MET",
             )
         )
