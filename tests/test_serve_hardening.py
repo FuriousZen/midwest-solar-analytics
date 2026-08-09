@@ -691,3 +691,65 @@ def test_repeated_requests_are_bit_identical(client):
         client.post("/predict", json=BODY).json()["predicted_days"] for _ in range(10)
     }
     assert len(values) == 1
+
+
+# ---------------------------------------------------------------------------
+# the ASGI entrypoint: refusing to start has to be *observable* to the server
+# ---------------------------------------------------------------------------
+
+
+def _drive_lifespan_startup(asgi):
+    """Send `lifespan.startup` to an ASGI app and collect what it sends back."""
+    import asyncio
+
+    sent: list[dict] = []
+    incoming = [{"type": "lifespan.startup"}]
+
+    async def receive():
+        return incoming.pop(0) if incoming else {"type": "lifespan.shutdown"}
+
+    async def send(message):
+        sent.append(message)
+
+    asyncio.run(asgi({"type": "lifespan", "asgi": {"version": "3.0"}}, receive, send))
+    return sent
+
+
+def test_asgi_entrypoint_reports_startup_failure_instead_of_raising(tmp_path):
+    """Raising in the lifespan scope is not enough: uvicorn starts anyway.
+
+    uvicorn treats an exception during the lifespan scope as "this app does not
+    implement the lifespan protocol", logs `ASGI 'lifespan' protocol appears
+    unsupported`, and serves. The ASGI-correct refusal is to send
+    `lifespan.startup.failed`, which makes uvicorn exit(3) without binding.
+    Verified against a real uvicorn 0.52.1 process; asserted here so it cannot
+    silently regress.
+    """
+    from msa.serve.app import _ServiceASGI
+
+    asgi = _ServiceASGI(SEGMENT, root=tmp_path / "no-such-models")
+    sent = _drive_lifespan_startup(asgi)
+
+    assert sent, "the app sent nothing; uvicorn would treat that as unsupported"
+    assert sent[0]["type"] == "lifespan.startup.failed"
+    assert "ArtifactMissingError" in sent[0]["message"]
+    assert "MSA_ALLOW_DEGRADED_START" in sent[0]["message"]
+
+
+def test_asgi_entrypoint_starts_when_degraded_is_allowed(tmp_path, monkeypatch):
+    from msa.serve.app import _ServiceASGI
+
+    monkeypatch.setenv("MSA_ALLOW_DEGRADED_START", "1")
+    asgi = _ServiceASGI(SEGMENT, root=tmp_path / "no-such-models")
+    sent = _drive_lifespan_startup(asgi)
+    assert sent[0]["type"] == "lifespan.startup.complete"
+    assert asgi.app.state.bundle is None
+
+
+def test_asgi_entrypoint_starts_cleanly_with_a_good_artifact(model_root):
+    from msa.serve.app import _ServiceASGI
+
+    asgi = _ServiceASGI(SEGMENT, root=model_root)
+    sent = _drive_lifespan_startup(asgi)
+    assert sent[0]["type"] == "lifespan.startup.complete"
+    assert asgi.app.state.bundle is not None

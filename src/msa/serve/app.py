@@ -731,8 +731,11 @@ class _ServiceASGI:
     single request.
     """
 
-    def __init__(self, segment: str = SEGMENT):
+    def __init__(self, segment: str = SEGMENT, root: Path | None = None):
         self._segment = segment
+        # resolved lazily: MODELS_DIR is fixed at import time, but a test (or a
+        # sidecar deployment) needs to point the entrypoint somewhere else
+        self._root = root
         self._app: FastAPI | None = None
         self._lock = threading.Lock()
 
@@ -744,7 +747,9 @@ class _ServiceASGI:
                     allow_degraded = _degraded_start_allowed()
                     try:
                         self._app = create_app(
-                            self._segment, require_model=not allow_degraded
+                            self._segment,
+                            root=self._root or MODELS_DIR,
+                            require_model=not allow_degraded,
                         )
                     except ArtifactError as exc:
                         LOG.critical(
@@ -761,7 +766,52 @@ class _ServiceASGI:
     def app(self) -> FastAPI:
         return self.build()
 
-    async def __call__(self, scope, receive, send):  # pragma: no cover - ASGI glue
+    async def _lifespan(self, scope, receive, send) -> None:
+        """Handle the lifespan scope so a bad artifact actually stops the server.
+
+        Raising here does **not** work: uvicorn interprets an exception during
+        the lifespan scope as "this app does not implement the lifespan
+        protocol", logs ``ASGI 'lifespan' protocol appears unsupported`` and
+        starts serving anyway -- which is precisely the outcome this service
+        must never have. The ASGI spec's way to refuse startup is to send
+        ``lifespan.startup.failed``; uvicorn then logs the message and exits.
+        Verified against uvicorn 0.52.1.
+        """
+        message = await receive()
+        if message["type"] != "lifespan.startup":  # pragma: no cover - defensive
+            return
+        try:
+            inner = self.build()
+        except Exception as exc:
+            await send(
+                {
+                    "type": "lifespan.startup.failed",
+                    "message": (
+                        f"{type(exc).__name__}: {exc} "
+                        f"(set MSA_ALLOW_DEGRADED_START=1 to start anyway and "
+                        f"serve 503 from the prediction endpoints)"
+                    ),
+                }
+            )
+            return
+
+        # hand the already-consumed startup message to the inner app so its own
+        # lifespan runs exactly as it would have
+        replayed = False
+
+        async def _receive():
+            nonlocal replayed
+            if not replayed:
+                replayed = True
+                return message
+            return await receive()
+
+        await inner(scope, _receive, send)
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "lifespan":
+            await self._lifespan(scope, receive, send)
+            return
         await self.build()(scope, receive, send)
 
 

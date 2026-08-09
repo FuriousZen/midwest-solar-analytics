@@ -467,13 +467,22 @@ def readme_block() -> str:
 
     a = _read(REPORTS_DIR / "permit_to_completion" / "final_metrics.json") or {}
     b = _read(REPORTS_DIR / "application_to_issue" / "final_metrics.json") or {}
+    sa = _read(REPORTS_DIR / "permit_to_completion" / "optuna_study.json") or {}
+    sb = _read(REPORTS_DIR / "application_to_issue" / "optuna_study.json") or {}
 
     if a or b:
         parts += [
             "### Headline metrics (tuned models)",
             "",
+            "The trial budget each model actually got is the first row, because",
+            "every metric below is conditional on it. Neither study ran to 200",
+            "trials: model A's was stopped at 136 and the final model was fitted",
+            "from those; model B's was deliberately run short.",
+            "",
             "| | Model A — installation timeline | Model B — permit review |",
             "|---|---:|---:|",
+            f"| Optuna trials completed | {sa.get('n_trials_completed', 'not measured')} | "
+            f"{sb.get('n_trials_completed', 'not measured')} |",
         ]
 
         def row(label, key, nd=3, pct=False):
