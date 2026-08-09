@@ -12,35 +12,55 @@ Dates come back as epoch **milliseconds** in UTC when ``f=json``.
 
 from __future__ import annotations
 
+import json as _json
 import logging
-import time
 from pathlib import Path
 
 import pandas as pd
-import requests
+
+from msa.ingest.http import MAX_ATTEMPTS as _MAX_RETRIES  # noqa: F401  (public name)
+from msa.ingest.http import SourceUnavailable, request_with_retries
 
 LOG = logging.getLogger(__name__)
 
 PAGE_SIZE = 2000
 _TIMEOUT = 180
-_MAX_RETRIES = 4
+#: Hard stop on offset paging. The largest layer in this corpus is well under
+#: 100k features; anything past this means the server is not honouring
+#: ``resultOffset`` and the loop would never end.
+MAX_PAGES = 500
 
 
 def _get_json(url: str, params: dict) -> dict:
-    last: Exception | None = None
-    for attempt in range(_MAX_RETRIES):
-        try:
-            resp = requests.get(url, params=params, timeout=_TIMEOUT)
-            resp.raise_for_status()
-            payload = resp.json()
-            if "error" in payload:
-                raise RuntimeError(f"ArcGIS error: {payload['error']}")
-            return payload
-        except Exception as exc:  # noqa: BLE001
-            last = exc
-            LOG.warning("ArcGIS request failed (%s); retry %d", exc, attempt + 1)
-            time.sleep(2**attempt)
-    raise RuntimeError(f"ArcGIS request failed after {_MAX_RETRIES} attempts") from last
+    """One FeatureServer request.
+
+    ArcGIS is unusual in answering **HTTP 200 with an ``error`` object** for
+    application-level failures (bad field name, layer deleted, token expired).
+    That is a permanent condition, so it is raised immediately rather than
+    retried -- the transport-level retrying happens one layer down.
+    """
+    resp = request_with_retries(
+        url, params, timeout=_TIMEOUT, source=f"arcgis:{url}"
+    )
+    try:
+        payload = resp.json()
+    except (_json.JSONDecodeError, ValueError) as exc:
+        raise SourceUnavailable(
+            f"arcgis:{url} returned a body that is not JSON "
+            f"(schema change or an error page?): {exc}",
+            source=f"arcgis:{url}",
+        ) from exc
+    if not isinstance(payload, dict):
+        raise SourceUnavailable(
+            f"arcgis:{url} returned {type(payload).__name__}, expected an object",
+            source=f"arcgis:{url}",
+        )
+    if "error" in payload:
+        raise SourceUnavailable(
+            f"arcgis:{url} returned an application error: {payload['error']}",
+            source=f"arcgis:{url}",
+        )
+    return payload
 
 
 def parse_esri_date(series: pd.Series) -> pd.Series:
@@ -101,7 +121,7 @@ def query(
 
     rows: list[dict] = []
     offset = 0
-    while True:
+    for _page in range(MAX_PAGES):
         payload = _get_json(
             f"{layer_url}/query",
             {
@@ -114,14 +134,22 @@ def query(
                 "f": "json",
             },
         )
-        feats = payload.get("features", [])
+        feats = payload.get("features") or []
         LOG.info("%s: %d features at offset %d", layer_url.rsplit("/", 2)[-2], len(feats), offset)
-        rows.extend(f["attributes"] for f in feats)
+        rows.extend(f.get("attributes", {}) for f in feats if isinstance(f, dict))
         if len(feats) < PAGE_SIZE and not payload.get("exceededTransferLimit"):
             break
         if not feats:
             break
         offset += len(feats)
+    else:
+        # A server that silently ignores `resultOffset` would page for ever.
+        raise SourceUnavailable(
+            f"arcgis:{layer_url} did not terminate within {MAX_PAGES} pages "
+            f"({MAX_PAGES * PAGE_SIZE} features); it is probably ignoring "
+            f"resultOffset",
+            source=f"arcgis:{layer_url}",
+        )
 
     df = pd.DataFrame(rows)
     for c in date_fields:

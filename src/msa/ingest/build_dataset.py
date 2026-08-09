@@ -52,26 +52,78 @@ OUT_PARQUET = PROCESSED_DIR / "installations.parquet"
 OUT_SUMMARY = PROCESSED_DIR / "dataset_summary.json"
 
 
-def build(refresh: bool = False, only: tuple[str, ...] | None = None) -> pd.DataFrame:
+#: A run that lost more than this fraction of its registered sources produced
+#: a corpus that is not comparable with the one the documented numbers came
+#: from, so it fails rather than quietly writing a smaller parquet over the
+#: bigger one.
+MAX_FAILED_SOURCE_FRACTION = 0.5
+
+#: Populated by the last :func:`build` call; folded into ``dataset_summary.json``
+#: so a degraded ingest leaves evidence in a committed artifact.
+LAST_FAILURES: dict[str, str] = {}
+
+
+def build(
+    refresh: bool = False,
+    only: tuple[str, ...] | None = None,
+    *,
+    strict: bool = False,
+) -> pd.DataFrame:
+    """Concatenate every registered source onto the canonical schema.
+
+    Per-source isolation is the whole point of the ``try``: twelve municipal
+    portals will not all be up at once, and one dead jurisdiction must cost the
+    run that jurisdiction's rows and nothing else. That includes a source whose
+    *schema* changed -- the canonical-column check therefore sits **inside** the
+    isolation, not after it. (It used to sit outside, so a renamed upstream
+    column in one small register aborted the entire ingest.)
+
+    ``strict=True`` re-raises instead, for CI and for anyone who would rather
+    have no dataset than a partial one.
+    """
     frames: list[pd.DataFrame] = []
     failures: dict[str, str] = {}
-    for key, loader in _sources().items():
-        if only and key not in only:
-            continue
+    sources = {k: v for k, v in _sources().items() if not only or k in only}
+
+    for key, loader in sources.items():
         try:
             df = loader(refresh=refresh)
+            missing = sorted(set(CANONICAL_COLUMNS) - set(df.columns))
+            if missing:
+                raise ValueError(
+                    f"source {key} is missing canonical columns {missing} "
+                    f"-- upstream schema change?"
+                )
+            if df.empty:
+                raise ValueError(f"source {key} returned no rows")
+            frame = df[list(CANONICAL_COLUMNS)]
         except Exception as exc:  # noqa: BLE001 - one bad portal must not kill the run
-            LOG.error("source %s failed: %s", key, exc)
-            failures[key] = str(exc)
+            if strict:
+                raise
+            LOG.error("source %s failed, continuing without it: %s", key, exc)
+            failures[key] = f"{type(exc).__name__}: {exc}"
             continue
-        missing = set(CANONICAL_COLUMNS) - set(df.columns)
-        if missing:
-            raise ValueError(f"source {key} is missing canonical columns {missing}")
-        LOG.info("source %-22s -> %6d rows", key, len(df))
-        frames.append(df[list(CANONICAL_COLUMNS)])
+        LOG.info("source %-22s -> %6d rows", key, len(frame))
+        frames.append(frame)
+
+    LAST_FAILURES.clear()
+    LAST_FAILURES.update(failures)
 
     if not frames:
         raise RuntimeError(f"no source produced data; failures={failures}")
+    if sources and len(failures) / len(sources) > MAX_FAILED_SOURCE_FRACTION:
+        raise RuntimeError(
+            f"{len(failures)} of {len(sources)} sources failed, which is more "
+            f"than the {MAX_FAILED_SOURCE_FRACTION:.0%} tolerated; refusing to "
+            f"overwrite the dataset with a partial corpus. failures={failures}"
+        )
+    if failures:
+        LOG.warning(
+            "ingest completed with %d of %d sources missing: %s",
+            len(failures),
+            len(sources),
+            sorted(failures),
+        )
 
     out = pd.concat(frames, ignore_index=True)
     for c in ("application_date", "issue_date", "completion_date"):
@@ -119,6 +171,10 @@ def summarise(df: pd.DataFrame) -> dict:
     return {
         "total_records": int(len(df)),
         "rows_with_usable_duration_by_segment": totals,
+        # A source that could not be read is recorded here rather than being
+        # silently absent from `sources`; otherwise a degraded ingest looks
+        # identical to a complete one that happens to be smaller.
+        "failed_sources": dict(LAST_FAILURES),
         "sources": rows,
     }
 
@@ -127,15 +183,35 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--refresh", action="store_true", help="re-download raw sources")
     ap.add_argument("--only", nargs="*", default=None, help="restrict to source keys")
+    ap.add_argument(
+        "--strict",
+        action="store_true",
+        help="fail the run if any single source fails, instead of skipping it",
+    )
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-    df = build(refresh=args.refresh, only=tuple(args.only) if args.only else None)
-    df.to_parquet(OUT_PARQUET, index=False)
+    df = build(
+        refresh=args.refresh,
+        only=tuple(args.only) if args.only else None,
+        strict=args.strict,
+    )
+    # Write both artifacts atomically: a half-written parquet is exactly the
+    # input that makes every downstream stage fail in a confusing way.
+    tmp_parquet = OUT_PARQUET.with_suffix(".parquet.tmp")
+    df.to_parquet(tmp_parquet, index=False)
+    tmp_parquet.replace(OUT_PARQUET)
     summary = summarise(df)
-    OUT_SUMMARY.write_text(json.dumps(summary, indent=2))
+    tmp_summary = OUT_SUMMARY.with_suffix(".json.tmp")
+    tmp_summary.write_text(json.dumps(summary, indent=2))
+    tmp_summary.replace(OUT_SUMMARY)
     print(json.dumps(summary, indent=2))
     print(f"\nwrote {len(df):,} rows -> {OUT_PARQUET}")
+    if summary["failed_sources"]:
+        print(
+            f"WARNING: {len(summary['failed_sources'])} source(s) failed and are "
+            f"absent from this corpus: {sorted(summary['failed_sources'])}"
+        )
 
 
 if __name__ == "__main__":  # pragma: no cover

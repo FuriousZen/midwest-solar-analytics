@@ -47,6 +47,12 @@ from msa.features.store import build_store, save_store
 from msa.train.baseline import N_SPLITS, default_xgb, make_cv, _oof_sklearn
 from msa.train.data import Dataset, load_dataset, load_raw
 from msa.train.metrics import improvement_pct, regression_metrics
+from msa.train.mlflow_model import (
+    BOOSTER_ARTIFACT,
+    METADATA_ARTIFACT,
+    TimelineModel,
+    json_safe_example,
+)
 from msa.train.tracking import init_mlflow
 from msa.train.tune import cv_evaluate, make_model
 
@@ -418,12 +424,20 @@ def run(segment: str, log_to_mlflow: bool = True) -> dict:
                 }
             )
             mlflow.log_metrics({k: v for k, v in metrics.items() if v is not None})
-            example = ds.X_test.head(3)
-            mlflow.xgboost.log_model(
-                model,
+            # Log a *servable* model, not just a stored one. See
+            # msa.train.mlflow_model for why the raw xgboost flavour cannot be
+            # served: JSON has no categorical dtype, so the booster rejects the
+            # frame MLflow hands it back.
+            example = json_safe_example(ds.X_test.head(3))
+            mlflow.pyfunc.log_model(
                 name=f"model-{segment}",
+                python_model=TimelineModel(),
+                artifacts={
+                    BOOSTER_ARTIFACT: str(md / "model.json"),
+                    METADATA_ARTIFACT: str(md / "metadata.json"),
+                },
                 signature=infer_signature(
-                    example, predict(model, example, log_target, horizon)
+                    example, predict(model, ds.X_test.head(3), log_target, horizon)
                 ),
                 input_example=example,
             )

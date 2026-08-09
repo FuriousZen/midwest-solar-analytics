@@ -323,17 +323,37 @@ def _attributions(
     return out
 
 
+def _request_id(request: Request | None = None) -> str | None:
+    """The correlation id for the current request.
+
+    Read from ``request.state`` first and the context variable second. The
+    500 handler runs *outside* the correlation middleware (Starlette's
+    ``ServerErrorMiddleware`` is the outermost layer), by which point the
+    context variable has already been reset -- but ``scope["state"]`` is the
+    same dict the middleware wrote to, so the id survives.
+    """
+    if request is not None:
+        rid = getattr(request.state, "request_id", None)
+        if rid:
+            return str(rid)
+    return request_id_var.get()
+
+
 def _error(
-    status_code: int, code: str, detail: str, request_id: str | None = None
+    status_code: int,
+    code: str,
+    detail: str,
+    request: Request | None = None,
+    request_id: str | None = None,
 ) -> JSONResponse:
     """The single place an error body is constructed.
 
     Nothing derived from an exception object ever reaches this function's
     ``detail`` -- callers pass a fixed string. Tracebacks, file paths and
-    library messages go to the log, keyed by ``request_id``.
+    library messages go to the log, keyed by the request id.
     """
     body = ErrorResponse(
-        error=code, detail=detail, request_id=request_id or request_id_var.get()
+        error=code, detail=detail, request_id=request_id or _request_id(request)
     )
     return JSONResponse(status_code=status_code, content=body.model_dump())
 
@@ -438,6 +458,9 @@ def create_app(
         # unbounded in length
         rid = rid[:64]
         token = request_id_var.set(rid)
+        # also on scope["state"], which outlives this middleware and is
+        # therefore still readable from the 500 handler above it
+        request.state.request_id = rid
         t0 = time.perf_counter()
         try:
             declared = request.headers.get("content-length")
@@ -447,7 +470,7 @@ def create_app(
                     413,
                     "payload_too_large",
                     f"request body exceeds the {MAX_BODY_BYTES} byte limit",
-                    rid,
+                    request_id=rid,
                 )
             else:
                 response = await call_next(request)
@@ -499,7 +522,7 @@ def create_app(
             413: "payload_too_large",
             503: "model_unavailable",
         }.get(exc.status_code, "http_error")
-        return _error(exc.status_code, code, detail)
+        return _error(exc.status_code, code, detail, request)
 
     @app.exception_handler(Exception)
     async def _on_unhandled(request: Request, exc: Exception):
@@ -507,7 +530,7 @@ def create_app(
         LOG.exception(
             "unhandled error", extra={"path": request.url.path}
         )
-        return _error(500, "internal_error", "internal error")
+        return _error(500, "internal_error", "internal error", request)
 
     # -- prediction --------------------------------------------------------
 

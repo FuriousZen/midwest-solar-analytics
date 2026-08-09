@@ -19,17 +19,18 @@ from __future__ import annotations
 import io
 import logging
 import os
-import time
 from pathlib import Path
 
 import pandas as pd
 import requests
 
+from msa.ingest.http import MAX_ATTEMPTS as _MAX_RETRIES  # noqa: F401  (public name)
+from msa.ingest.http import SourceUnavailable, request_with_retries
+
 LOG = logging.getLogger(__name__)
 
 PAGE_SIZE = 20_000
 _TIMEOUT = 120
-_MAX_RETRIES = 4
 
 
 def _headers() -> dict[str, str]:
@@ -38,22 +39,14 @@ def _headers() -> dict[str, str]:
 
 
 def _get(url: str, params: dict[str, str]) -> requests.Response:
-    last_exc: Exception | None = None
-    for attempt in range(_MAX_RETRIES):
-        try:
-            resp = requests.get(
-                url, params=params, headers=_headers(), timeout=_TIMEOUT
-            )
-            if resp.status_code == 429 or resp.status_code >= 500:
-                raise requests.HTTPError(f"HTTP {resp.status_code}: {resp.text[:300]}")
-            resp.raise_for_status()
-            return resp
-        except Exception as exc:  # noqa: BLE001 - retry any transport error
-            last_exc = exc
-            sleep = 2**attempt
-            LOG.warning("Socrata request failed (%s); retrying in %ss", exc, sleep)
-            time.sleep(sleep)
-    raise RuntimeError(f"Socrata request failed after {_MAX_RETRIES} attempts") from last_exc
+    """One SODA request, with the shared timeout/backoff policy applied."""
+    return request_with_retries(
+        url,
+        params,
+        timeout=_TIMEOUT,
+        headers=_headers(),
+        source=f"socrata:{url}",
+    )
 
 
 def count(domain: str, dataset_id: str, where: str | None = None) -> int:
@@ -100,7 +93,36 @@ def fetch_csv(
         if where:
             params["$where"] = where
         text = _get(url, params).text
-        page = pd.read_csv(io.StringIO(text), low_memory=False)
+        # An empty body is a legitimate answer (we paged past the end) and is
+        # not the same thing as a broken one. pandas raises on both, so
+        # distinguish them here rather than letting EmptyDataError escape as if
+        # the source were down.
+        stripped = text.lstrip()
+        if not stripped:
+            LOG.info("%s/%s: empty page at offset %d", domain, dataset_id, offset)
+            break
+        # A portal in trouble answers 200 with an HTML error page. pandas will
+        # happily parse that into a one-column frame of junk, which then flows
+        # all the way into the corpus. Detect it here, where it is obvious.
+        if stripped[0] == "<":
+            raise SourceUnavailable(
+                f"socrata:{domain}/{dataset_id} returned HTML, not CSV "
+                f"(error page behind a 200?)",
+                source=f"socrata:{domain}/{dataset_id}",
+            )
+        try:
+            page = pd.read_csv(io.StringIO(text), low_memory=False)
+        except pd.errors.EmptyDataError:
+            LOG.info(
+                "%s/%s: header-only page at offset %d", domain, dataset_id, offset
+            )
+            break
+        except pd.errors.ParserError as exc:
+            raise SourceUnavailable(
+                f"socrata:{domain}/{dataset_id} returned a body that is not CSV "
+                f"(schema change or an error page?): {exc}",
+                source=f"socrata:{domain}/{dataset_id}",
+            ) from exc
         LOG.info("%s/%s: fetched %d rows at offset %d", domain, dataset_id, len(page), offset)
         if page.empty:
             break

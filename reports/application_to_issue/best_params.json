@@ -1,0 +1,17 @@
+{
+  "log1p_target": true,
+  "grow_policy": "depthwise",
+  "objective": "reg:absoluteerror",
+  "n_estimators": 750,
+  "learning_rate": 0.01734550660238028,
+  "max_depth": 7,
+  "min_child_weight": 0.5661734112922325,
+  "subsample": 0.6107905403772101,
+  "colsample_bytree": 0.507307381663546,
+  "colsample_bylevel": 0.4733857759753984,
+  "gamma": 6.38154522776077e-06,
+  "reg_alpha": 6.153738309153346e-06,
+  "reg_lambda": 0.27418917581872043,
+  "max_bin": 512,
+  "max_cat_to_onehot": 11
+}
