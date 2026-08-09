@@ -44,7 +44,7 @@ a flattering R² driven entirely by which milestone pair a row belongs to.
 git clone <this repo> && cd midwest-solar-analytics
 make venv                       # .venv + pinned deps + editable install
 make data                       # download & assemble the public corpus (~1 min)
-make test                       # 49 tests, offline
+make test                       # 53 tests, offline
 TRIALS=20 make pipeline         # smoke run of everything, ~10 min
 ```
 
@@ -256,7 +256,7 @@ values on a gradient-boosted tree, not an approximation.
 | 29,425-record Midwest solar permit corpus, 12 jurisdictions, 8 states | **measured** — `data/processed/dataset_summary.json` |
 | Horizon coverage / censoring analysis | **measured** — `reports/horizon_coverage.json` |
 | Four baselines per segment, identical 5-fold splits | **measured** — `reports/<segment>/baseline_results.json` |
-| Test suite (50 tests, incl. 5 leakage tests) | **measured** — `make test` |
+| Test suite (53 tests, incl. 5 leakage tests) | **measured** — `make test` |
 | 200-trial Optuna study, tuned model, MLflow export, latency p95, SHAP dashboard | **not measured in this tree** — `./scripts/run_pipeline.sh` |
 
 The study was started three times and stopped three times: twice deliberately
