@@ -25,7 +25,7 @@ def main() -> None:
     for edition in EDITIONS:
         try:
             keys = _list_state_keys(edition)
-        except Exception as exc:  # noqa: BLE001 - an absent edition is a result
+        except Exception as exc:
             out[edition] = {"error": str(exc)}
             print(f"{edition}: unavailable ({exc})")
             continue

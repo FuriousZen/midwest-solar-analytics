@@ -1,0 +1,9 @@
+# Developer / CI tooling. Deliberately *not* in requirements.lock.txt: that
+# file is the runtime environment the measured numbers came from, and adding a
+# linter to it would make the reproduction environment differ from the one that
+# produced the artifacts.
+#
+#   pip install -r requirements.txt -r requirements-dev.txt
+
+ruff==0.14.6
+pip-audit==2.10.1

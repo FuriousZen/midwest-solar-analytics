@@ -3,8 +3,8 @@ PY ?= .venv/bin/python
 TRIALS ?= 200
 SEGMENT ?= permit_to_completion
 
-.PHONY: help venv data baselines tune final explain serve bench test ablate \
-        results mlflow-summary pipeline mlflow-ui clean
+.PHONY: help venv dev data baselines tune final explain serve bench test lint \
+        audit smoke ablate results mlflow-summary pipeline mlflow-ui clean
 
 help:
 	@grep -E '^[a-z-]+:.*?##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/' | column -t -s "$$(printf '\t')"
@@ -12,8 +12,11 @@ help:
 venv: ## create .venv and install pinned dependencies
 	python3 -m venv .venv
 	.venv/bin/pip install --upgrade pip
-	.venv/bin/pip install -r requirements.txt
-	.venv/bin/pip install -e .
+	.venv/bin/pip install -r requirements.lock.txt
+	.venv/bin/pip install --no-deps -e .
+
+dev: ## add the linter / auditor on top of .venv
+	.venv/bin/pip install -r requirements-dev.txt
 
 data: ## download and assemble the public permit + utility corpus
 	$(PY) -m msa.ingest.build_dataset
@@ -39,6 +42,15 @@ bench: ## measure the latency distribution
 
 test: ## run the test suite
 	$(PY) -m pytest
+
+lint: ## static checks (same command CI runs)
+	.venv/bin/ruff check .
+
+audit: ## known CVEs in the pinned environment -- see docs/SECURITY.md
+	.venv/bin/pip-audit -r requirements.lock.txt --progress-spinner off
+
+smoke: ## whole pipeline end to end, offline, in a temp dir (~3 min)
+	$(PY) -m scripts.smoke_pipeline --trials 3
 
 ablate: ## measure what absolute time indices cost on the chronological holdout
 	$(PY) -m scripts.ablate_time_features

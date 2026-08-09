@@ -88,7 +88,7 @@ def build_store(X: pd.DataFrame, meta: pd.DataFrame, raw: pd.DataFrame) -> dict:
 
     store = {
         "as_of": str(pd.Timestamp(order.max()).date()),
-        "n_rows": int(len(X)),
+        "n_rows": len(X),
         "jurisdiction_source": {str(k): str(v) for k, v in juris_source.items()},
         "contractor": _last_by(X, raw["contractor"], CONTRACTOR_FEATURES, order),
         "jurisdiction": _last_by(

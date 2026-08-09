@@ -169,7 +169,7 @@ def _one_segment(
     if apply_censor_guard and not out.empty:
         # Right-censoring is per-source: each portal has its own snapshot date.
         keep = pd.Series(True, index=out.index)
-        for src, sub in out.groupby("source", sort=False):
+        for _src, sub in out.groupby("source", sort=False):
             cutoff = sub["end_date"].max() - pd.Timedelta(days=horizon)
             keep.loc[sub.index] = sub["start_date"] <= cutoff
         out = out[keep]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 
 import pandas as pd
@@ -87,12 +88,21 @@ def load_raw(path=DATASET_PATH) -> pd.DataFrame:
 
 
 def load_tts():
-    """Load the LBNL utility-record context layer, or ``None`` if unavailable."""
+    """Load the LBNL utility-record context layer, or ``None`` if unavailable.
+
+    ``MSA_DISABLE_TTS=1`` skips it outright. The layer is a ~2 GB public
+    download the first time; CI and the smoke pipeline need a run that touches
+    no network at all, and "no market-context features" is a supported
+    configuration (the columns simply stay missing, which XGBoost handles).
+    """
+    if os.environ.get("MSA_DISABLE_TTS", "").lower() in {"1", "true", "yes"}:
+        LOG.info("MSA_DISABLE_TTS set; building features without the TTS layer")
+        return None
     try:
         from msa.ingest import tts
 
         return tts.load()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         LOG.warning("Tracking the Sun context unavailable (%s); continuing without", exc)
         return None
 
@@ -138,4 +148,4 @@ def load_dataset(
     return ds
 
 
-__all__ = ["Dataset", "load_dataset", "load_raw", "load_tts", "RANDOM_SEED"]
+__all__ = ["RANDOM_SEED", "Dataset", "load_dataset", "load_raw", "load_tts"]

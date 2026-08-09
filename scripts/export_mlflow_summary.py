@@ -78,7 +78,7 @@ def export() -> dict:
 
     summary = {
         "experiment": MLFLOW_EXPERIMENT,
-        "total_runs": int(len(runs)),
+        "total_runs": len(runs),
         "runs_by_stage": {str(k): int(v) for k, v in by_stage.items()},
         "runs_by_segment_and_stage": {
             str(k): {str(kk): int(vv) for kk, vv in v.items()}

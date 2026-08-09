@@ -29,14 +29,14 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
-import matplotlib.pyplot as plt  # noqa: E402
-import numpy as np  # noqa: E402
-import pandas as pd  # noqa: E402
-import shap  # noqa: E402
-import xgboost as xgb  # noqa: E402
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import shap
+import xgboost as xgb
 
-from msa.config import DEFAULT_SEGMENT, MODELS_DIR, REPORTS_DIR, SEGMENTS  # noqa: E402
-from msa.train.data import load_dataset  # noqa: E402
+from msa.config import DEFAULT_SEGMENT, MODELS_DIR, REPORTS_DIR, SEGMENTS
+from msa.train.data import load_dataset
 
 LOG = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ def compute(segment: str, max_rows: int = MAX_EXPLAIN_ROWS):
 def build(segment: str, max_rows: int = MAX_EXPLAIN_ROWS) -> Path:
     out = REPORTS_DIR / segment
     out.mkdir(parents=True, exist_ok=True)
-    model, meta, ds, X, metaframe, y, expl = compute(segment, max_rows)
+    model, meta, _ds, X, metaframe, y, expl = compute(segment, max_rows)
     log_target = bool(meta.get("log1p_target"))
     unit = "log1p(days)" if log_target else "days"
 
@@ -119,7 +119,7 @@ def build(segment: str, max_rows: int = MAX_EXPLAIN_ROWS) -> Path:
             images[f"dep_{name}"] = _save(
                 plt.gcf(), out / f"shap_dependence_{name}.png"
             )
-        except Exception as exc:  # noqa: BLE001 - categorical columns can fail
+        except Exception as exc:
             LOG.warning("dependence plot for %s skipped: %s", name, exc)
             plt.close("all")
 
@@ -163,7 +163,7 @@ def build(segment: str, max_rows: int = MAX_EXPLAIN_ROWS) -> Path:
         sub = np.abs(expl.values[pos]).mean(axis=0)
         s = pd.Series(sub, index=list(X.columns)).sort_values(ascending=False)
         by_juris[juris] = {
-            "n": int(len(pos)),
+            "n": len(pos),
             "top_drivers": [
                 {"feature": f, "mean_abs_shap": float(v)} for f, v in s.head(6).items()
             ],
@@ -172,7 +172,7 @@ def build(segment: str, max_rows: int = MAX_EXPLAIN_ROWS) -> Path:
     summary = {
         "segment": segment,
         "unit": unit,
-        "n_explained": int(len(X)),
+        "n_explained": len(X),
         "base_value": float(np.ravel(expl.base_values)[0]),
         "global_ranking": [
             {"feature": f, "mean_abs_shap": float(v)} for f, v in mean_abs.items()

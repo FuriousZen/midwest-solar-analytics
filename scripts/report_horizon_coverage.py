@@ -26,7 +26,7 @@ def main() -> None:
         d = d[d >= 0]
         h = max_timeline_days(seg)
         out[seg] = {
-            "rows_with_both_dates": int(len(d)),
+            "rows_with_both_dates": len(d),
             "horizon_days": h,
             "coverage_pct": round(float((d <= h).mean() * 100), 2),
             "quantiles": {

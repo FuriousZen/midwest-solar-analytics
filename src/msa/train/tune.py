@@ -248,7 +248,7 @@ def main() -> None:
         wall = time.perf_counter() - t0
 
         # baseline reference: identical folds, stock hyper-parameters
-        from msa.train.baseline import default_xgb, _oof_sklearn
+        from msa.train.baseline import _oof_sklearn, default_xgb
 
         base_oof = _oof_sklearn(default_xgb, ds.X_train, ds.y_train, make_cv())
         base = regression_metrics(ds.y_train, base_oof, prefix="cv_")
@@ -257,7 +257,7 @@ def main() -> None:
         payload = {
             "segment": args.segment,
             "study_name": study.study_name,
-            "sampler": "TPESampler(multivariate=True, seed=%d)" % RANDOM_SEED,
+            "sampler": f"TPESampler(multivariate=True, seed={RANDOM_SEED})",
             "n_trials": len(study.trials),
             "n_trials_completed": len(
                 [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
@@ -266,7 +266,7 @@ def main() -> None:
                 [t for t in study.trials if t.state == optuna.trial.TrialState.FAIL]
             ),
             "cv_splits": N_SPLITS,
-            "cv_type": "KFold(shuffle=True, random_state=%d)" % RANDOM_SEED,
+            "cv_type": f"KFold(shuffle=True, random_state={RANDOM_SEED})",
             "wall_seconds": wall,
             "n_train": ds.n_train,
             "best_trial_number": best.number,

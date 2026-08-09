@@ -36,4 +36,4 @@ def init_mlflow(experiment: str = MLFLOW_EXPERIMENT) -> str:
 def count_runs(experiment: str = MLFLOW_EXPERIMENT) -> int:
     mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
     runs = mlflow.search_runs(experiment_names=[experiment], output_format="pandas")
-    return int(len(runs))
+    return len(runs)

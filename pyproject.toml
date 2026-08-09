@@ -19,3 +19,33 @@ dependencies = {file = ["requirements.txt"]}
 testpaths = ["tests"]
 addopts = "-q"
 filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "scripts", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes -- unused imports/names, undefined names
+    "I",    # import ordering
+    "B",    # bugbear -- mutable defaults, shadowed loop vars, silent except
+    "UP",   # pyupgrade
+    "C4",   # comprehension rewrites
+    "RUF",  # ruff's own rules
+]
+ignore = [
+    "E501",    # line length is enforced by the formatter's judgement, not a hard cap
+    "B008",    # FastAPI's Query()/Depends() in defaults is the documented idiom
+    "RUF012",  # ClassVar annotations on pydantic/mlflow model attributes
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests reach into private attributes on purpose to prove a bound is enforced.
+"tests/*" = ["B011", "SLF001"]
+# The SHAP report must set the matplotlib backend before importing pyplot.
+"src/msa/explain/shap_report.py" = ["E402"]
+# The generated tables use U+2212 MINUS deliberately: "(end − start).days" is
+# mathematical notation in prose, not an operator in code.
+"scripts/make_results_tables.py" = ["RUF001"]

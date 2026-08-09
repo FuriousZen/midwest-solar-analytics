@@ -16,7 +16,6 @@ from msa.ingest import arcgis, chicago
 from msa.ingest.arcgis_permits import LAYERS, PermitLayer, to_canonical
 from msa.ingest.text import extract_kw, has_battery, is_pv, normalize_contractor
 
-
 # --------------------------------------------------------------------------
 # shared text helpers
 # --------------------------------------------------------------------------

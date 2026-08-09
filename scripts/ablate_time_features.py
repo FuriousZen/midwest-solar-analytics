@@ -37,13 +37,13 @@ def _add_time_indices(X: pd.DataFrame, meta: pd.DataFrame, origin) -> pd.DataFra
 
 
 def evaluate(X_tr, y_tr, X_te, y_te) -> dict:
-    params = dict(
-        enable_categorical=True,
-        tree_method="hist",
-        random_state=RANDOM_SEED,
-        n_jobs=-1,
-        verbosity=0,
-    )
+    params = {
+        "enable_categorical": True,
+        "tree_method": "hist",
+        "random_state": RANDOM_SEED,
+        "n_jobs": -1,
+        "verbosity": 0,
+    }
     oof = np.empty(len(y_tr))
     for tr, va in make_cv().split(X_tr):
         m = XGBRegressor(**params)

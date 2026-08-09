@@ -20,7 +20,7 @@ from __future__ import annotations
 import argparse
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import mlflow
@@ -44,7 +44,7 @@ from msa.features.build import (
     back_transform,
 )
 from msa.features.store import build_store, save_store
-from msa.train.baseline import N_SPLITS, default_xgb, make_cv, _oof_sklearn
+from msa.train.baseline import N_SPLITS, _oof_sklearn, default_xgb, make_cv
 from msa.train.data import Dataset, load_dataset, load_raw
 from msa.train.metrics import improvement_pct, regression_metrics
 from msa.train.mlflow_model import (
@@ -215,7 +215,7 @@ def build_metadata(ds: Dataset, params: dict, log_target: bool, metrics: dict) -
         # Stamped first so it is impossible to write a metadata file without
         # it; msa.serve refuses to load an artifact that lacks or mismatches it.
         "artifact_schema_version": ARTIFACT_SCHEMA_VERSION,
-        "trained_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "trained_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "segment": ds.segment,
         "target": "timeline_days",
         "target_definition": f"({end} - {start}).days",
@@ -250,7 +250,7 @@ def run(segment: str, log_to_mlflow: bool = True) -> dict:
     cv = make_cv()
 
     horizon = float(max_timeline_days(segment))
-    tuned_cv, tuned_folds, tuned_oof = cv_evaluate(
+    tuned_cv, _tuned_folds, tuned_oof = cv_evaluate(
         params, ds.X_train, ds.y_train, cv, log_target, horizon
     )
     base_oof = _oof_sklearn(default_xgb, ds.X_train, ds.y_train, make_cv())

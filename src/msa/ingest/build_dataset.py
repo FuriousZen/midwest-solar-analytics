@@ -97,7 +97,7 @@ def build(
             if df.empty:
                 raise ValueError(f"source {key} returned no rows")
             frame = df[list(CANONICAL_COLUMNS)]
-        except Exception as exc:  # noqa: BLE001 - one bad portal must not kill the run
+        except Exception as exc:
             if strict:
                 raise
             LOG.error("source %s failed, continuing without it: %s", key, exc)
@@ -142,13 +142,13 @@ def summarise(df: pd.DataFrame) -> dict:
             "source": src,
             "jurisdiction": juris,
             "state": state,
-            "records": int(len(sub)),
+            "records": len(sub),
         }
         for seg, (a, b) in SEGMENTS.items():
             d = (sub[b] - sub[a]).dt.days.dropna()
             d = d[d >= 0]
             entry[seg] = {
-                "rows": int(len(d)),
+                "rows": len(d),
                 "median_days": float(d.median()) if len(d) else None,
                 "mean_days": float(d.mean()) if len(d) else None,
                 "p90_days": float(d.quantile(0.9)) if len(d) else None,
@@ -169,7 +169,7 @@ def summarise(df: pd.DataFrame) -> dict:
         d = (df[b] - df[a]).dt.days.dropna()
         totals[seg] = int((d >= 0).sum())
     return {
-        "total_records": int(len(df)),
+        "total_records": len(df),
         "rows_with_usable_duration_by_segment": totals,
         # A source that could not be read is recorded here rather than being
         # silently absent from `sources`; otherwise a degraded ingest looks

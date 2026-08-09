@@ -69,7 +69,7 @@ class TimelineModel(mlflow.pyfunc.PythonModel):
                 frame[name] = pd.to_numeric(frame[name], errors="coerce")
         return frame
 
-    def predict(self, context, model_input, params=None):  # noqa: ARG002
+    def predict(self, context, model_input, params=None):
         X = self._as_model_frame(model_input)
         raw = np.asarray(self._model.predict(X), dtype=float)
         if self._log_target:

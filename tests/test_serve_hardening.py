@@ -566,7 +566,7 @@ def test_concurrent_predictions_agree_with_the_serial_answer(client):
             r = client.post("/predict", json=BODY)
             assert r.status_code == 200
             results.append(r.json()["predicted_days"])
-        except BaseException as exc:  # noqa: BLE001 - surfaced below
+        except BaseException as exc:
             errors.append(exc)
 
     threads = [threading.Thread(target=hit) for _ in range(32)]

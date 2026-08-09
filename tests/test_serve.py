@@ -62,7 +62,7 @@ def test_predict_returns_a_sane_duration(client):
     assert body["attributions"] is None
     # completion date must be start_date + predicted_days
     expected = pd.Timestamp("2024-05-01") + pd.Timedelta(
-        days=int(round(body["predicted_days"]))
+        days=round(body["predicted_days"])
     )
     assert body["predicted_completion_date"] == str(expected.date())
 

@@ -13,12 +13,16 @@ inventing a number.
 from __future__ import annotations
 
 import json
+import os
 from datetime import date
 from pathlib import Path
 
 from msa.config import REPORTS_DIR, SEGMENTS, max_timeline_days
 
-DOCS = Path(__file__).resolve().parents[1] / "docs"
+#: Where RESULTS.md is written. Overridable so the CI smoke pipeline can
+#: generate its tables into a scratch directory instead of over the committed
+#: docs -- a smoke run must never rewrite the numbers a real run measured.
+DOCS = Path(os.environ.get("MSA_DOCS_DIR", Path(__file__).resolve().parents[1] / "docs"))
 SEGMENT_ORDER = ("permit_to_completion", "application_to_issue")
 SEGMENT_TITLE = {
     "permit_to_completion": "Model A — installation timeline (permit issued → completion)",
@@ -257,6 +261,21 @@ def _latency_block(d: dict, mode: str) -> list[str]:
         f"| mean | {s['mean_ms']:.2f} |",
         "",
     ]
+    by_conc = d.get("by_concurrency") or {}
+    if len(by_conc) > 1:
+        out += [
+            "Under concurrent load (same request mix, N in flight at once):",
+            "",
+            "| concurrent requests | p50 (ms) | p95 (ms) | throughput (req/s) |",
+            "|---:|---:|---:|---:|",
+        ]
+        for level in sorted(by_conc, key=int):
+            c = by_conc[level]
+            out.append(
+                f"| {level} | {c['p50_ms']:.2f} | {c['p95_ms']:.2f} | "
+                f"{c['throughput_rps']:.0f} |"
+            )
+        out.append("")
     if d.get("batch_request"):
         b = d["batch_request"]
         out.append(
@@ -458,11 +477,12 @@ def readme_block() -> str:
         ]
 
         def row(label, key, nd=3, pct=False):
-            va, vb = a.get(key), b.get(key)
-            f = lambda v: (
-                "not measured" if v is None else (f"{v:.{nd}f}" + ("%" if pct else ""))
-            )
-            parts.append(f"| {label} | {f(va)} | {f(vb)} |")
+            def f(v):
+                if v is None:
+                    return "not measured"
+                return f"{v:.{nd}f}" + ("%" if pct else "")
+
+            parts.append(f"| {label} | {f(a.get(key))} | {f(b.get(key))} |")
 
         row("training rows", "n_train")
         row("5-fold CV MAE (days)", "cv_mae", 2)
@@ -524,6 +544,9 @@ def readme_block() -> str:
 
 
 def inject_readme() -> None:
+    if os.environ.get("MSA_DOCS_DIR"):
+        print("MSA_DOCS_DIR is set; leaving README.md alone")
+        return
     path = Path(__file__).resolve().parents[1] / "README.md"
     text = path.read_text()
     if README_START not in text:

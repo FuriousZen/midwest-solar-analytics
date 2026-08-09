@@ -18,7 +18,6 @@ from msa.features.build import (
     clean,
 )
 
-
 # --------------------------------------------------------------------------
 # target construction
 # --------------------------------------------------------------------------
@@ -102,7 +101,7 @@ def test_contractor_history_excludes_the_current_row(synthetic_canonical):
         ],
         axis=1,
     )
-    for contractor, sub in frame.dropna(subset=["contractor"]).groupby("contractor"):
+    for _contractor, sub in frame.dropna(subset=["contractor"]).groupby("contractor"):
         sub = sub.sort_values("start_date")
         # first job for a contractor has no history at all
         assert sub["contractor_prior_permits"].iloc[0] == 0
@@ -118,7 +117,7 @@ def test_jurisdiction_recent_stats_use_only_already_finished_jobs(synthetic_cano
     X, _ = build_features(df)
     col = "jurisdiction_recent_mean_days_60d"
     joined = pd.concat([df.reset_index(drop=True), X[[col]]], axis=1)
-    for juris, sub in joined.groupby("jurisdiction"):
+    for _juris, sub in joined.groupby("jurisdiction"):
         for i in range(0, len(sub), 17):  # sample rows to keep the test quick
             row = sub.iloc[i]
             if pd.isna(row[col]):
@@ -137,7 +136,7 @@ def test_open_permit_count_is_observable_at_start_date(synthetic_canonical):
     joined = pd.concat(
         [df.reset_index(drop=True), X[["jurisdiction_open_permits"]]], axis=1
     )
-    for juris, sub in joined.groupby("jurisdiction"):
+    for _juris, sub in joined.groupby("jurisdiction"):
         for i in range(0, len(sub), 23):
             row = sub.iloc[i]
             expected = (

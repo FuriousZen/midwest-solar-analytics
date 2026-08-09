@@ -149,7 +149,7 @@ class ModelBundle:
         self.model = xgb.XGBRegressor()
         try:
             self.model.load_model(str(model_path))
-        except Exception as exc:  # noqa: BLE001 - xgboost raises XGBoostError/ValueError
+        except Exception as exc:
             raise ArtifactCorruptError(
                 f"{model_path} could not be loaded as an XGBoost booster "
                 f"(truncated or not a booster file): {exc}"
@@ -183,7 +183,7 @@ class ModelBundle:
             self.qmodel = xgb.XGBRegressor()
             try:
                 self.qmodel.load_model(str(qpath))
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 raise ArtifactCorruptError(
                     f"{qpath} could not be loaded as an XGBoost booster: {exc}"
                 ) from exc
@@ -228,7 +228,7 @@ class ModelBundle:
                     self.model.predict(self.canary), self.log_target, self.horizon
                 )[0]
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise ArtifactCorruptError(
                 f"loaded model for segment {self.segment!r} could not score a "
                 f"canary row: {exc}"
@@ -571,7 +571,7 @@ def create_app(
                     p10_days=round(float(bounds[i, 0]), 2) if bounds is not None else None,
                     p90_days=round(float(bounds[i, -1]), 2) if bounds is not None else None,
                     predicted_completion_date=item.start_date
-                    + timedelta(days=int(round(days))),
+                    + timedelta(days=round(days)),
                     horizon_days=b.horizon,
                     segment=b.segment,
                     model_version=b.version,

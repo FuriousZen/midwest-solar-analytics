@@ -129,12 +129,12 @@ def _oof_sklearn(model_factory, X: pd.DataFrame, y: pd.Series, cv: KFold) -> np.
 
 def default_xgb(**overrides) -> XGBRegressor:
     """Stock XGBRegressor -- only the knobs needed to consume the data at all."""
-    params = dict(
-        enable_categorical=True,
-        tree_method="hist",
-        random_state=RANDOM_SEED,
-        n_jobs=-1,
-    )
+    params = {
+        "enable_categorical": True,
+        "tree_method": "hist",
+        "random_state": RANDOM_SEED,
+        "n_jobs": -1,
+    }
     params.update(overrides)
     return XGBRegressor(**params)
 

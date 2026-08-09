@@ -1,0 +1,93 @@
+name: CI
+
+# Three jobs, in increasing order of what they can catch:
+#   lint      -- static problems, seconds
+#   tests     -- unit + serving + ingest-robustness contracts, offline
+#   smoke     -- the whole pipeline end to end on a synthetic corpus, offline
+#
+# None of them touch the network beyond installing dependencies: the ingesters
+# are exercised against fake HTTP responses and the pipeline runs on a
+# generated corpus, so a municipal portal being down can never turn CI red.
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - run: pip install -r requirements-dev.txt
+      - name: ruff
+        run: ruff check --output-format=github .
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.lock.txt
+      - name: install the exact measured environment
+        run: |
+          pip install -r requirements.lock.txt
+          pip install --no-deps -e .
+      - name: pip check
+        run: pip check
+      - name: test suite
+        run: pytest -q
+
+  smoke:
+    # The chain, not the units: a broken hand-off between train/final.py and
+    # serve/app.py passes every unit test and fails here.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.lock.txt
+      - name: install the exact measured environment
+        run: |
+          pip install -r requirements.lock.txt
+          pip install --no-deps -e .
+      - name: end-to-end pipeline on a synthetic corpus
+        run: python -m scripts.smoke_pipeline --trials 3 --rows 4000
+      - name: the committed results must not have been rewritten by the smoke run
+        run: git diff --exit-code -- docs README.md reports data
+
+  audit:
+    # Advisory: a *new* CVE in the pinned set should be visible, but the one
+    # known finding is documented and unfixable without leaving mlflow's
+    # supported range -- see docs/SECURITY.md.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - name: pip-audit
+        run: |
+          pip-audit -r requirements.lock.txt \
+            --ignore-vuln PYSEC-2026-3552 \
+            --progress-spinner off
