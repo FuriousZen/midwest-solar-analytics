@@ -34,7 +34,12 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from msa.config import DEFAULT_SEGMENT, MODELS_DIR
-from msa.features.build import CATEGORICAL_FEATURES, FEATURES, as_model_frame
+from msa.features.build import (
+    CATEGORICAL_FEATURES,
+    FEATURES,
+    as_model_frame,
+    back_transform,
+)
 from msa.features.store import apply_store, load_store
 from msa.serve.schemas import (
     Attribution,
@@ -168,10 +173,9 @@ def create_app(segment: str = SEGMENT, root: Path = MODELS_DIR) -> FastAPI:
 
     def _predict(items: list[PermitRequest], explain: bool) -> list[PredictionResponse]:
         X = request_frame(items, bundle)
-        preds = bundle.model.predict(X)
-        if bundle.log_target:
-            preds = np.expm1(preds)
-        preds = np.clip(preds, 0.0, bundle.horizon)
+        preds = back_transform(
+            bundle.model.predict(X), bundle.log_target, bundle.horizon
+        )
 
         # TreeSHAP is computed once for the whole frame; calling it per row
         # would make an explained batch quadratic in the batch size.
@@ -184,9 +188,7 @@ def create_app(segment: str = SEGMENT, root: Path = MODELS_DIR) -> FastAPI:
             q = np.atleast_2d(bundle.qmodel.predict(X))
             if q.shape[0] != len(X):
                 q = q.T
-            if bundle.log_target:
-                q = np.expm1(q)
-            q = np.sort(q, axis=1)
+            q = np.sort(back_transform(q, bundle.log_target, bundle.horizon), axis=1)
             # split-conformal widening estimated during training
             q[:, 0] -= bundle.conformal_delta
             q[:, -1] += bundle.conformal_delta

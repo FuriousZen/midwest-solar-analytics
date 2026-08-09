@@ -108,6 +108,36 @@ FEATURES: tuple[str, ...] = NUMERIC_FEATURES + CATEGORICAL_FEATURES
 
 
 # ---------------------------------------------------------------------------
+# Target transform
+# ---------------------------------------------------------------------------
+
+
+def back_transform(pred, log_target: bool, horizon: float):
+    """Undo the target transform and clamp into the modelled range.
+
+    Shared by training, evaluation and serving so a prediction means the same
+    thing in all three. Two hazards it closes:
+
+    * A booster fitted on ``log1p(days)`` can emit a score large enough that
+      ``expm1`` overflows to ``+inf``. Clamping in *log space first* makes the
+      back-transform total. (An uncaught ``inf`` aborted trial 185 of a 200-trial
+      study; ``tests/test_features.py::test_back_transform_never_returns_infinity``
+      pins the fix.)
+    * ``NaN`` must never reach the API response: bare ``NaN`` is not valid JSON
+      and strict clients reject the whole payload.
+
+    Clamping to ``[0, horizon]`` is not a fudge -- training targets are bounded
+    by the horizon by construction (see ``msa.config``), so a prediction outside
+    it is outside the model's declared range.
+    """
+    pred = np.asarray(pred, dtype=float)
+    if log_target:
+        pred = np.expm1(np.clip(pred, 0.0, np.log1p(horizon)))
+    pred = np.clip(pred, 0.0, horizon)
+    return np.nan_to_num(pred, nan=0.0, posinf=horizon, neginf=0.0)
+
+
+# ---------------------------------------------------------------------------
 # Cleaning
 # ---------------------------------------------------------------------------
 

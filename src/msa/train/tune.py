@@ -41,6 +41,7 @@ from msa.config import (
     SEGMENTS,
     max_timeline_days,
 )
+from msa.features.build import back_transform
 from msa.train.baseline import N_SPLITS, make_cv
 from msa.train.data import Dataset, load_dataset
 from msa.train.metrics import improvement_pct, regression_metrics
@@ -104,26 +105,6 @@ def make_model(params: dict) -> XGBRegressor:
         verbosity=0,
         **params,
     )
-
-
-def back_transform(pred: np.ndarray, log_target: bool, horizon: float) -> np.ndarray:
-    """Undo the target transform and clamp into the modelled range.
-
-    A booster fitted on ``log1p(days)`` can emit a large enough raw score that
-    ``expm1`` overflows to ``+inf`` -- which then propagates into the metrics and
-    kills the whole study (it did: trial 185 of the first 200-trial run aborted
-    with "Input contains infinity"). Clamping in *log space first* makes the
-    back-transform total.
-
-    Clamping to ``[0, horizon]`` is not a fudge: the training targets are bounded
-    by the horizon by construction (see ``msa.config``), so a prediction outside
-    it is out of the model's declared range. The serving path clamps identically.
-    """
-    pred = np.asarray(pred, dtype=float)
-    if log_target:
-        pred = np.expm1(np.clip(pred, 0.0, np.log1p(horizon)))
-    pred = np.clip(pred, 0.0, horizon)
-    return np.nan_to_num(pred, nan=0.0, posinf=horizon, neginf=0.0)
 
 
 def cv_evaluate(

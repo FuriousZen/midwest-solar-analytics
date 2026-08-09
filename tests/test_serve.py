@@ -294,3 +294,18 @@ def test_overlong_free_text_is_rejected(client):
         client.post("/predict", json=dict(BODY, contractor="y" * 5000)).status_code
         == 422
     )
+
+
+def test_response_is_strict_json_with_no_nan(client):
+    """Bare NaN is not valid JSON; a strict client rejects the whole payload."""
+    import json as _json
+
+    r = client.post("/predict?explain=true", json=BODY)
+    assert r.status_code == 200
+    # json.loads with parse_constant raises on NaN/Infinity tokens
+    _json.loads(
+        r.text,
+        parse_constant=lambda c: (_ for _ in ()).throw(
+            AssertionError(f"non-finite token {c!r} in response")
+        ),
+    )
