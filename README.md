@@ -457,6 +457,16 @@ short by.**
   trade-off here, but it is not a coded work class in most cities.
 * **Tracking the Sun coverage ends 2024-03** and covers only IL/MN/OH/WI, so its
   context features saturate for recent permits in other states.
+* **The prediction interval is honest but wide, and over-covers.** Conformal
+  calibration was needed because the raw pinball-loss quantiles covered only
+  51.8% (model A) and 69.9% (model B) of the holdout at a nominal 80%. The
+  correction fixes that — 90.8% and 88.8% — but by adding ±60.3 and ±4.2 days,
+  giving a median interval width of **164 days** for model A and 21 for model
+  B. A 164-day-wide interval on a median 59-day job is close to useless
+  operationally, and after clipping at zero the lower bound is frequently 0.
+  It is the correct interval for a model this uncertain, which is the point:
+  the width is the model's uncertainty made visible, not a defect of the
+  calibration.
 * **The feature store is a snapshot,** not a live store. Contractor and
   jurisdiction context are frozen at training time; `/metadata` reports
   `feature_store_as_of` so staleness is visible rather than silent.
