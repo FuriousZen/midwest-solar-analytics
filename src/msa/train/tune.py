@@ -33,7 +33,14 @@ from optuna.samplers import TPESampler
 from sklearn.model_selection import KFold
 from xgboost import XGBRegressor
 
-from msa.config import DEFAULT_SEGMENT, RANDOM_SEED, REPORTS_DIR, SEGMENTS
+from msa.config import (
+    DEFAULT_SEGMENT,
+    RANDOM_SEED,
+    REPO_ROOT,
+    REPORTS_DIR,
+    SEGMENTS,
+    max_timeline_days,
+)
 from msa.train.baseline import N_SPLITS, make_cv
 from msa.train.data import Dataset, load_dataset
 from msa.train.metrics import improvement_pct, regression_metrics
@@ -99,24 +106,44 @@ def make_model(params: dict) -> XGBRegressor:
     )
 
 
+def back_transform(pred: np.ndarray, log_target: bool, horizon: float) -> np.ndarray:
+    """Undo the target transform and clamp into the modelled range.
+
+    A booster fitted on ``log1p(days)`` can emit a large enough raw score that
+    ``expm1`` overflows to ``+inf`` -- which then propagates into the metrics and
+    kills the whole study (it did: trial 185 of the first 200-trial run aborted
+    with "Input contains infinity"). Clamping in *log space first* makes the
+    back-transform total.
+
+    Clamping to ``[0, horizon]`` is not a fudge: the training targets are bounded
+    by the horizon by construction (see ``msa.config``), so a prediction outside
+    it is out of the model's declared range. The serving path clamps identically.
+    """
+    pred = np.asarray(pred, dtype=float)
+    if log_target:
+        pred = np.expm1(np.clip(pred, 0.0, np.log1p(horizon)))
+    pred = np.clip(pred, 0.0, horizon)
+    return np.nan_to_num(pred, nan=0.0, posinf=horizon, neginf=0.0)
+
+
 def cv_evaluate(
     params: dict,
     X: pd.DataFrame,
     y: pd.Series,
     cv: KFold,
     log_target: bool,
+    horizon: float | None = None,
 ) -> tuple[dict[str, float], list[dict[str, float]], np.ndarray]:
     """Return (aggregate metrics, per-fold metrics, out-of-fold predictions)."""
+    if horizon is None:
+        horizon = float(y.max())
     oof = np.empty(len(y), dtype=float)
     fold_metrics: list[dict[str, float]] = []
     for fold, (tr, va) in enumerate(cv.split(X)):
         model = make_model(params)
         y_tr = np.log1p(y.iloc[tr]) if log_target else y.iloc[tr]
         model.fit(X.iloc[tr], y_tr, verbose=False)
-        pred = model.predict(X.iloc[va])
-        if log_target:
-            pred = np.expm1(pred)
-        pred = np.clip(pred, 0.0, None)
+        pred = back_transform(model.predict(X.iloc[va]), log_target, horizon)
         oof[va] = pred
         fm = regression_metrics(y.iloc[va], pred)
         fm["fold"] = fold
@@ -131,20 +158,32 @@ def run_study(
     n_trials: int = 200,
     log_to_mlflow: bool = True,
     study_name: str = "xgb-timeline-tpe",
+    storage: str | None = None,
 ) -> optuna.Study:
     X, y = ds.X_train, ds.y_train
     cv = make_cv()
+    horizon = float(max_timeline_days(ds.segment))
 
+    # Persistent storage: a 200-trial study takes ~1 hour, so losing it to a
+    # crash (or a killed shell) is expensive. With `load_if_exists=True` a rerun
+    # picks up where it stopped and only runs the trials still owed.
     sampler = TPESampler(seed=RANDOM_SEED, multivariate=True, n_startup_trials=25)
     study = optuna.create_study(
-        direction="minimize", sampler=sampler, study_name=study_name
+        direction="minimize",
+        sampler=sampler,
+        study_name=study_name,
+        storage=storage or None,
+        load_if_exists=True,
     )
+    already = len([t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE])
+    if already:
+        LOG.info("resuming study %s with %d completed trials", study_name, already)
 
     def objective(trial: optuna.Trial) -> float:
         log_target = trial.suggest_categorical("log1p_target", [False, True])
         params = suggest_params(trial)
         t0 = time.perf_counter()
-        agg, folds, _ = cv_evaluate(params, X, y, cv, log_target)
+        agg, folds, _ = cv_evaluate(params, X, y, cv, log_target, horizon)
         elapsed = time.perf_counter() - t0
 
         if log_to_mlflow:
@@ -170,7 +209,15 @@ def run_study(
         trial.set_user_attr("seconds", elapsed)
         return agg["cv_mae"]
 
-    study.optimize(objective, n_trials=n_trials, gc_after_trial=True)
+    remaining = max(n_trials - already, 0)
+    study.optimize(
+        objective,
+        n_trials=remaining,
+        gc_after_trial=True,
+        # One pathological configuration must not abort a one-hour search. The
+        # failure is recorded on the trial and the sampler moves on.
+        catch=(ValueError, ArithmeticError),
+    )
     return study
 
 
@@ -179,6 +226,11 @@ def main() -> None:
     ap.add_argument("--trials", type=int, default=200)
     ap.add_argument("--segment", default=DEFAULT_SEGMENT, choices=list(SEGMENTS))
     ap.add_argument("--no-mlflow", action="store_true")
+    ap.add_argument(
+        "--storage",
+        default=f"sqlite:///{REPO_ROOT / 'optuna.db'}",
+        help="Optuna storage URL; pass '' to keep the study in memory only",
+    )
     args = ap.parse_args()
     rd = report_dir(args.segment)
     study_path = rd / "optuna_study.json"
@@ -210,6 +262,7 @@ def main() -> None:
             n_trials=args.trials,
             log_to_mlflow=not args.no_mlflow,
             study_name=f"xgb-{args.segment}-tpe",
+            storage=args.storage,
         )
         wall = time.perf_counter() - t0
 
@@ -225,6 +278,12 @@ def main() -> None:
             "study_name": study.study_name,
             "sampler": "TPESampler(multivariate=True, seed=%d)" % RANDOM_SEED,
             "n_trials": len(study.trials),
+            "n_trials_completed": len(
+                [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
+            ),
+            "n_trials_failed": len(
+                [t for t in study.trials if t.state == optuna.trial.TrialState.FAIL]
+            ),
             "cv_splits": N_SPLITS,
             "cv_type": "KFold(shuffle=True, random_state=%d)" % RANDOM_SEED,
             "wall_seconds": wall,

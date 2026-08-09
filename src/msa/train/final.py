@@ -41,7 +41,7 @@ from msa.train.baseline import N_SPLITS, default_xgb, make_cv, _oof_sklearn
 from msa.train.data import Dataset, load_dataset, load_raw
 from msa.train.metrics import improvement_pct, regression_metrics
 from msa.train.tracking import init_mlflow
-from msa.train.tune import cv_evaluate, make_model
+from msa.train.tune import back_transform, cv_evaluate, make_model
 
 LOG = logging.getLogger(__name__)
 
@@ -119,14 +119,14 @@ def fit_quantiles(ds: Dataset, params: dict, log_target: bool):
     return model
 
 
-def predict_quantiles(model, X: pd.DataFrame, log_target: bool) -> np.ndarray:
+def predict_quantiles(
+    model, X: pd.DataFrame, log_target: bool, horizon: float
+) -> np.ndarray:
     """Return an ``(n, len(QUANTILES))`` array in days, sorted per row."""
     pred = np.atleast_2d(model.predict(X))
     if pred.shape[0] != len(X):
         pred = pred.T
-    if log_target:
-        pred = np.expm1(pred)
-    pred = np.clip(pred, 0.0, None)
+    pred = back_transform(pred, log_target, horizon)
     # crossing quantiles are possible with independent pinball losses; enforce
     # monotonicity so the published interval is always well formed
     return np.sort(pred, axis=1)
@@ -137,7 +137,9 @@ def predict_quantiles(model, X: pd.DataFrame, log_target: bool) -> np.ndarray:
 CALIBRATION_FRACTION = 0.15
 
 
-def calibrate_conformal(ds: Dataset, params: dict, log_target: bool) -> float:
+def calibrate_conformal(
+    ds: Dataset, params: dict, log_target: bool, horizon: float
+) -> float:
     """Split-conformal (CQR) widening for the quantile interval.
 
     Pinball-loss quantiles are not calibrated out of the box -- on this data the
@@ -173,7 +175,7 @@ def calibrate_conformal(ds: Dataset, params: dict, log_target: bool) -> float:
         segment=ds.segment,
     )
     model = fit_quantiles(fit_ds, params, log_target)
-    q = predict_quantiles(model, fit_ds.X_test, log_target)
+    q = predict_quantiles(model, fit_ds.X_test, log_target, horizon)
     y = fit_ds.y_test.to_numpy()
     scores = np.maximum(q[:, 0] - y, y - q[:, 2])
     alpha = 1.0 - (QUANTILES[2] - QUANTILES[0])
@@ -188,11 +190,10 @@ def calibrate_conformal(ds: Dataset, params: dict, log_target: bool) -> float:
     return delta
 
 
-def predict(model, X: pd.DataFrame, log_target: bool) -> np.ndarray:
-    pred = model.predict(X)
-    if log_target:
-        pred = np.expm1(pred)
-    return np.clip(pred, 0.0, None)
+def predict(
+    model, X: pd.DataFrame, log_target: bool, horizon: float
+) -> np.ndarray:
+    return back_transform(model.predict(X), log_target, horizon)
 
 
 def build_metadata(ds: Dataset, params: dict, log_target: bool, metrics: dict) -> dict:
@@ -231,19 +232,20 @@ def run(segment: str, log_to_mlflow: bool = True) -> dict:
     params, log_target, trial_no = load_best_params(segment)
     cv = make_cv()
 
+    horizon = float(max_timeline_days(segment))
     tuned_cv, tuned_folds, tuned_oof = cv_evaluate(
-        params, ds.X_train, ds.y_train, cv, log_target
+        params, ds.X_train, ds.y_train, cv, log_target, horizon
     )
     base_oof = _oof_sklearn(default_xgb, ds.X_train, ds.y_train, make_cv())
     base_cv = regression_metrics(ds.y_train, base_oof, prefix="cv_")
 
     model = fit_final(ds, params, log_target)
-    test_pred = predict(model, ds.X_test, log_target)
+    test_pred = predict(model, ds.X_test, log_target, horizon)
     test = regression_metrics(ds.y_test, test_pred, prefix="test_")
 
-    conformal_delta = calibrate_conformal(ds, params, log_target)
+    conformal_delta = calibrate_conformal(ds, params, log_target, horizon)
     qmodel = fit_quantiles(ds, params, log_target)
-    q_test = predict_quantiles(qmodel, ds.X_test, log_target)
+    q_test = predict_quantiles(qmodel, ds.X_test, log_target, horizon)
     raw_lo, mid, raw_hi = q_test[:, 0], q_test[:, 1], q_test[:, 2]
     lo = np.clip(raw_lo - conformal_delta, 0.0, None)
     hi = raw_hi + conformal_delta
@@ -373,7 +375,9 @@ def run(segment: str, log_to_mlflow: bool = True) -> dict:
             mlflow.xgboost.log_model(
                 model,
                 name=f"model-{segment}",
-                signature=infer_signature(example, predict(model, example, log_target)),
+                signature=infer_signature(
+                    example, predict(model, example, log_target, horizon)
+                ),
                 input_example=example,
             )
             mlflow.log_artifact(str(md / "metadata.json"))

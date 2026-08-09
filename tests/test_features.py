@@ -213,10 +213,13 @@ def test_conformal_delta_lifts_coverage_towards_nominal(synthetic_canonical):
         segment="permit_to_completion",
     )
     params = {"n_estimators": 60, "max_depth": 3}
-    delta = calibrate_conformal(ds, params, log_target=False)
+    horizon = float(max_timeline_days("permit_to_completion"))
+    delta = calibrate_conformal(ds, params, log_target=False, horizon=horizon)
     assert np.isfinite(delta)
 
-    q = predict_quantiles(fit_quantiles(ds, params, False), ds.X_test, False)
+    q = predict_quantiles(
+        fit_quantiles(ds, params, False), ds.X_test, False, horizon
+    )
     truth = ds.y_test.to_numpy()
     raw = ((truth >= q[:, 0]) & (truth <= q[:, 2])).mean()
     cal = (
@@ -224,3 +227,20 @@ def test_conformal_delta_lifts_coverage_towards_nominal(synthetic_canonical):
     ).mean()
     nominal = QUANTILES[2] - QUANTILES[0]
     assert abs(cal - nominal) <= abs(raw - nominal) + 1e-9
+
+
+def test_back_transform_never_returns_infinity():
+    """A log-target booster can emit a score whose expm1 overflows to +inf.
+
+    That killed trial 185 of the first 200-trial study, so the back-transform is
+    clamped in log space and the behaviour is pinned here.
+    """
+    from msa.train.tune import back_transform
+
+    raw = np.array([-5.0, 0.0, 3.0, 1e3, 1e30, np.inf, np.nan])
+    out = back_transform(raw, log_target=True, horizon=365.0)
+    assert np.isfinite(out).all()
+    assert (out >= 0).all() and (out <= 365.0).all()
+
+    out2 = back_transform(np.array([-10.0, 50.0, 1e12]), log_target=False, horizon=120.0)
+    assert np.allclose(out2, [0.0, 50.0, 120.0])

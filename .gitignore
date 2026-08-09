@@ -17,3 +17,4 @@ data/processed/*
 .ruff_cache/
 *.egg-info/
 models/
+optuna.db
