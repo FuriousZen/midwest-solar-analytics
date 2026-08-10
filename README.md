@@ -9,27 +9,6 @@ XGBoost regression · Optuna (5-fold CV; **136 trials** for model A, **20** for
 model B — neither study ran the full 200, see below) · MLflow tracking · SHAP
 attribution dashboard · FastAPI prediction service with a latency benchmark.
 
-> **Every number in [Results](#results) is machine-generated from artifacts in
-> `reports/` by `python -m scripts.make_results_tables`.** Nothing in that
-> section is typed in by hand, so a figure cannot drift from what was actually
-> measured, and a claim whose artifact does not exist is printed as
-> **NOT MEASURED** rather than quietly omitted. Figures quoted in prose
-> elsewhere are copied from the same committed artifacts and each names the file
-> it came from, so any of them can be checked.
->
-> **Current status:** every stage now runs end to end and every claim in the
-> scorecard has a measurement behind it. Final models are fitted for both
-> segments, the API serves real predictions with SHAP explanations, and the
-> latency distribution is measured.
->
-> **The trial budgets were short and are labelled as such everywhere.** Model
-> A's study was stopped at **136 of 200** trials and the final model was fitted
-> from those 136; model B's study was deliberately run to only **20** trials.
-> Neither number is the 200 the pipeline defaults to, and the metrics below are
-> conditional on that. `./scripts/run_pipeline.sh` runs the full budget.
-
----
-
 ## What it predicts
 
 | Model | Segment | Question | Rows |
