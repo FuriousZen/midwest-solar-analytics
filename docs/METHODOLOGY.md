@@ -24,16 +24,16 @@ clock starts.** Nothing may depend on the record's own `end_date`, or on the
 
 That rule is what makes several of the strongest features legitimate:
 
-* `contractor_prior_mean_days` — the mean duration of that contractor's
+* `contractor_prior_mean_days`: the mean duration of that contractor's
   **strictly earlier** jobs. An expanding mean with `shift(1)`, so a record can
   never contribute to its own feature value.
-* `jurisdiction_recent_median_days_60d` — the realised turnaround of permits
+* `jurisdiction_recent_median_days_60d`: the realised turnaround of permits
   **already closed** in the 60 days before `start_date`. Those durations are
   fully observed at time *t*.
-* `jurisdiction_open_permits` — permits filed before *t* that have not yet
+* `jurisdiction_open_permits`: permits filed before *t* that have not yet
   closed as of *t*. Whether a previous permit is still open is knowable on day
   *t*; only its eventual close date is unknown, and that is not used.
-* Tracking the Sun context — as-of joins over utility records installed
+* Tracking the Sun context: as-of joins over utility records installed
   strictly before `start_date`.
 
 Five tests enforce this rather than trusting the reasoning:
@@ -43,8 +43,8 @@ Five tests enforce this rather than trusting the reasoning:
 | `test_contractor_history_excludes_the_current_row` | a contractor's first job has `NaN` history, and every later row's prior mean equals the mean of strictly earlier targets |
 | `test_jurisdiction_recent_stats_use_only_already_finished_jobs` | the 60-day window is recomputed by brute force and must match exactly |
 | `test_open_permit_count_is_observable_at_start_date` | the open-permit count is recomputed by brute force |
-| `test_jurisdiction_application_counts_are_strictly_prior` | same-day siblings are excluded from the trailing-window counts — these registers are day-resolution and give no intra-day ordering, so counting them would be a look-ahead |
-| `test_shuffling_the_target_destroys_signal` | with a permuted target the model must score R² < 0.05 — if any feature encoded the row's own target it would not |
+| `test_jurisdiction_application_counts_are_strictly_prior` | same-day siblings are excluded from the trailing-window counts; these registers are day-resolution and give no intra-day ordering, so counting them would be a look-ahead |
+| `test_shuffling_the_target_destroys_signal` | with a permuted target the model must score R² < 0.05. If any feature encoded the row's own target it would not |
 
 **This caught a real bug.** `_contractor_features` originally used
 `groupby(...).apply(...)`, which returns rows *grouped by key* rather than in
@@ -75,7 +75,7 @@ those two columns on identical folds and writes
 
 Two things follow. First, the predicted CV inflation does not happen: CV R²
 differs by 0.0014 and 0.0024, which is noise. Second, the effect on the holdout
-runs the *opposite* way to the claim — excluding the indices costs 0.147 R² on
+runs the *opposite* way to the claim: excluding the indices costs 0.147 R² on
 model A and 0.027 on model B.
 
 The columns stay excluded, for a reason that this ablation cannot test rather
@@ -97,16 +97,16 @@ and the feature list lives in one tuple in `msa/features/build.py`.
   touched during the search.
 * **Holdout**: chronological, and **split inside each jurisdiction** (each city
   contributes its own most recent 20%). A single global cut-off would change the
-  *mix of cities* between train and test as well as the time period — the
-  registers' coverage windows differ by up to a decade — confounding "does this
+  *mix of cities* between train and test as well as the time period (the
+  registers' coverage windows differ by up to a decade), confounding "does this
   generalise forward in time?" with "does this generalise to a different city?".
   The global split is available via `split_strategy="global"`.
 * **Baselines**, all scored on the identical folds:
-  1. `global_median` — training median for everything
-  2. `group_median` — median of the (jurisdiction, review_track) cell, i.e. the
+  1. `global_median`: training median for everything
+  2. `group_median`: median of the (jurisdiction, review_track) cell, i.e. the
      rule a permit desk already applies
-  3. `ridge` — Ridge on median-imputed numerics + one-hot categoricals
-  4. `xgb_default` — `XGBRegressor()` with stock hyper-parameters. **This is the
+  3. `ridge`: Ridge on median-imputed numerics + one-hot categoricals
+  4. `xgb_default`: `XGBRegressor()` with stock hyper-parameters. **This is the
      baseline the "improvement from hyper-parameter search" figure is measured
      against.**
 
@@ -132,7 +132,7 @@ every context feature per contractor / jurisdiction / ZIP / state at the end of
 training. The service is then a pure function of *(request, snapshot)*: no disk
 reads, no network calls, one `XGBRegressor.predict` on a single row.
 
-Staleness is explicit — `/metadata` reports `feature_store_as_of`. Refreshing
+Staleness is explicit: `/metadata` reports `feature_store_as_of`. Refreshing
 means re-running the pipeline.
 
 ### Known train/serve gaps
@@ -143,11 +143,11 @@ something that would mean a different thing than it did in training:
 
 | Feature | Training | Serving |
 |---|---|---|
-| `contractor_days_since_last_app` | days since that contractor's previous filing | missing — needs filing history relative to the request date |
+| `contractor_days_since_last_app` | days since that contractor's previous filing | missing, needs filing history relative to the request date |
 | `jurisdiction_*` queue state | recomputed per row | last observed value for that jurisdiction, dated by `feature_store_as_of` |
 
-Everything else — calendar features, size/cost transforms, the zoning-review
-flag — is derived by the same code path in both places.
+Everything else (calendar features, size/cost transforms, the zoning-review
+flag) is derived by the same code path in both places.
 `tests/test_serve.py::test_request_frame_matches_training_columns_and_levels`
 and `::test_zoning_review_flag_is_derived_the_same_way_as_in_training` pin that.
 
@@ -160,7 +160,7 @@ that fails it:
 | check | why it exists |
 |---|---|
 | `artifact_schema_version == 1` | an artifact written by a different version of this code may mean different things by the same field names |
-| `features` identical to `msa.features.build.FEATURES` | a model fitted before a feature was added still loads into XGBoost and still returns floats — floats that answer a different question. This is the check that turns that into a startup failure |
+| `features` identical to `msa.features.build.FEATURES` | a model fitted before a feature was added still loads into XGBoost and still returns floats: floats that answer a different question. This is the check that turns that into a startup failure |
 | categorical levels present for every categorical column | the serving frame has to be encoded with exactly the levels the booster was fitted on, or a category silently becomes "unseen" |
 | booster feature count matches | catches a truncated or mismatched `model.json` that still parses |
 | canary prediction returns a finite number | proves the loaded object can actually score, not merely that it deserialised |
@@ -172,7 +172,7 @@ It is published on `/health`, `/ready`, `/metrics` and on every prediction.
 ## Reproducibility
 
 Every seeded path uses the single constant `RANDOM_SEED = 20250201`: the CV
-folds, the Optuna sampler, and every booster. This is not assumed — it is
+folds, the Optuna sampler, and every booster. This is not assumed. It is
 measured. Two independent `python -m msa.train.final` runs of both segments, in
 separate processes, produced **byte-identical boosters**:
 

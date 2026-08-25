@@ -5,11 +5,11 @@ without one.
 
 ## Pinning
 
-* `requirements.txt` — the direct dependencies, each pinned to an exact version.
-* `requirements.lock.txt` — the full resolved environment (111 packages,
+* `requirements.txt`: the direct dependencies, each pinned to an exact version.
+* `requirements.lock.txt`: the full resolved environment (111 packages,
   every transitive dependency pinned). This is the environment the measured
   numbers came from and the one CI installs.
-* `requirements-dev.txt` — linter and auditor only. Deliberately *not* in the
+* `requirements-dev.txt`: linter and auditor only. Deliberately *not* in the
   lock file, so the reproduction environment is not contaminated by tooling
   that had nothing to do with producing the numbers.
 
@@ -60,8 +60,8 @@ between a broken environment and this advisory. The advisory stays.
 `EnvelopedData` decryption: decrypting a `RecipientInfo`'s `encryptedKey`
 reveals the recovered key length through distinguishable errors and timing. It
 is exploitable against a service that automatically decrypts PKCS#7 data
-supplied by an attacker. This project never calls PKCS#7 decryption — not
-directly, and not through MLflow, whose use of `cryptography` here is limited
+supplied by an attacker. This project never calls PKCS#7 decryption, not
+directly and not through MLflow, whose use of `cryptography` here is limited
 to the TLS and JWT paths that are not even exercised by a local SQLite tracking
 store. Grep confirms it:
 
@@ -85,13 +85,13 @@ its pin, drop the ignore and bump `cryptography`.
   (`MSA_SERVE_SEGMENT`, `MSA_MODELS_DIR`, `MSA_ALLOW_DEGRADED_START`,
   `MSA_MAX_BODY_BYTES`, `MSA_MAX_CONCURRENT_EXPLAIN`, `MSA_LOG_*`).
 * Error responses carry a fixed code, a fixed human-readable string and a
-  correlation id — never an exception message, a traceback or a filesystem
+  correlation id, never an exception message, a traceback or a filesystem
   path. `tests/test_serve_hardening.py::assert_no_leak` asserts this against
   every error path the suite can reach.
 * Request bodies are capped (`MSA_MAX_BODY_BYTES`, default 4 MiB → 413),
   batches are capped at 1000 items, every string field is length-capped and
-  every numeric field is range-capped. `Infinity` and `NaN` — which Python's
-  JSON parser accepts — are rejected at validation.
+  every numeric field is range-capped. `Infinity` and `NaN` (which Python's
+  JSON parser accepts) are rejected at validation.
 * `SOCRATA_APP_TOKEN` is read by the *ingester*, never by the service, and is
   only ever sent as a request header to the Socrata domain being queried.
 

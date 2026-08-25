@@ -4,17 +4,17 @@ Both the Socrata and the ArcGIS client talk to municipal portals that are
 occasionally slow, occasionally 500, and occasionally rate-limit. The policy is
 the same for both, so it lives in one place:
 
-* **Every request has a timeout.** A hung socket is the one failure a retry
-  loop cannot recover from, because it never returns to be retried.
-* **Retry only what retrying can fix**: connection errors, timeouts, 429, and
-  5xx. A 404 (dataset moved), a 400 (bad SoQL) or a 403 (token revoked) will
-  return exactly the same answer four times over; failing immediately turns a
+* Every request has a timeout. A hung socket is the one failure a retry loop
+  cannot recover from, because it never returns to be retried.
+* Retry only what retrying can fix: connection errors, timeouts, 429, and 5xx.
+  A 404 (dataset moved), a 400 (bad SoQL) or a 403 (token revoked) will return
+  exactly the same answer four times over; failing immediately turns a
   ~15-second wait into an instant, accurate error message.
-* **Exponential backoff with full jitter**, and *no sleep after the final
-  attempt* -- the previous implementation slept 8 seconds before raising, which
-  is pure latency added to a failure that had already happened.
-* **One exception type** (:class:`SourceUnavailable`) so callers can isolate a
-  dead jurisdiction without catching bare ``Exception``.
+* Exponential backoff with full jitter, and no sleep after the final attempt.
+  An earlier version slept 8 seconds before raising, which is pure latency
+  added to a failure that had already happened.
+* One exception type (:class:`SourceUnavailable`) so callers can isolate a dead
+  jurisdiction without catching bare ``Exception``.
 """
 
 from __future__ import annotations

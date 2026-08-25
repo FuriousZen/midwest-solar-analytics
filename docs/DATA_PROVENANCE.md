@@ -17,7 +17,7 @@ is regenerated on every build and records the per-source counts below.
 
 ---
 
-## 1. Permit registers — the source of the target variable
+## 1. Permit registers: the source of the target variable
 
 Twelve municipal building-permit registers across eight Midwest states. Each
 publishes some subset of three milestone dates; the ingester maps whatever it
@@ -76,7 +76,7 @@ Two filters are applied before modelling, both in `msa/features/build.py::clean`
 
 ---
 
-## 2. Utility records — LBNL *Tracking the Sun* (context features only)
+## 2. Utility records: LBNL *Tracking the Sun* (context features only)
 
 * **Source**: Lawrence Berkeley National Laboratory, *Tracking the Sun*, the
   public data file of U.S. distributed PV systems compiled from state incentive
@@ -84,9 +84,9 @@ Two filters are applied before modelling, both in `msa/features/build.py::clean`
 * **Access**: DOE/NREL Open Energy Data Initiative public S3 bucket,
   `https://oedi-data-lake.s3.amazonaws.com/tracking-the-sun/2024/state=<XX>/`,
   anonymous HTTPS, Hive-partitioned by edition and state.
-* **Midwest coverage in the 2024 edition**: IL, MN, OH, WI only — **98,275
+* **Midwest coverage in the 2024 edition**: IL, MN, OH, WI only, **98,275
   systems**. (IN, IA, MI, NE, ND, SD are not published at all; KS and MO appear
-  only in the 2018-2020 editions. Verified by listing the bucket --
+  only in the 2018-2020 editions. Verified by listing the bucket:
   `python -m scripts.verify_tts_states`, output in
   `reports/tts_state_coverage.json`.)
 
@@ -106,11 +106,11 @@ Recorded so the search is auditable rather than repeated.
 
 | Source | Why rejected |
 |---|---|
-| **Illinois Shines / Adjustable Block Program** (`illinoisshines.com/project-application-reports/`) — ~117,000 Illinois projects, joinable on `Application ID`, with several real date pairs | Measures **programme administration** (Part I submission → ICC approval; Part II submission → verification), not permitting or construction. Its `Online Date` runs *backwards* relative to approval (median −104 days) because vendors routinely energise first and file after, so it cannot anchor an installation timeline. Excluded to keep one coherent target definition rather than to avoid the work |
+| **Illinois Shines / Adjustable Block Program** (`illinoisshines.com/project-application-reports/`), ~117,000 Illinois projects, joinable on `Application ID`, with several real date pairs | Measures **programme administration** (Part I submission → ICC approval; Part II submission → verification), not permitting or construction. Its `Online Date` runs *backwards* relative to approval (median −104 days) because vendors routinely energise first and file after, so it cannot anchor an installation timeline. Excluded to keep one coherent target definition rather than to avoid the work |
 | Cincinnati `uhjb-xac9` (headline Building Permits) | Its `description` column is a 16-value category label, not scope text; `like '%SOLAR%'` returns 0. Full-text hits are the street "SOLAR VISTA PL" and contractor names. Solar had to be identified in `thvx-5mem` instead |
-| Sioux Falls SD | 158,752 permits with a textbook `APPLYDATE`/`ISSUEDATE`/`FINALIZEDATE` schema and contractor names, but **no description field at all** and no solar work class — solar is unidentifiable |
+| Sioux Falls SD | 158,752 permits with a textbook `APPLYDATE`/`ISSUEDATE`/`FINALIZEDATE` schema and contractor names, but **no description field at all** and no solar work class, so solar is unidentifiable |
 | Columbus OH | 677,179 permits, no free-text field, no solar category; only proxy is contractor business name |
-| Cook County IL Assessor Permits | 26,074 solar rows but `estimated_date_of_completion` is a *text* column populated on 414 of 719,506 rows — one date in practice |
+| Cook County IL Assessor Permits | 26,074 solar rows but `estimated_date_of_completion` is a *text* column populated on 414 of 719,506 rows, one date in practice |
 | Michigan MPSC Distributed Generation, Ohio PUCO DER, Illinois Solar for All, Iowa IUC, Missouri PSC, Kansas CC | One date, or aggregate-only reporting mandated by regulation |
 | NREL SolarTRACE | Exactly the permit → inspection → interconnection durations wanted, but published as **AHJ × utility × year medians**, not row level. `data.nrel.gov` was also unreachable from this environment |
 | MISO / SPP interconnection queues | Utility-scale only (372 + 93 Midwest solar projects); `inService` is a *planned* date |
