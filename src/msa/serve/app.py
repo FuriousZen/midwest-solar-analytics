@@ -18,7 +18,7 @@ Startup contract
 ----------------
 The model directory is validated against :mod:`msa.artifacts` before the
 service will answer anything. A missing, truncated, or schema-incompatible
-artifact is never served: by default the process **refuses to start** and says
+artifact is never served: by default the process refuses to start and says
 why. Set ``MSA_ALLOW_DEGRADED_START=1`` to start anyway, in which case
 ``/health`` reports ``degraded``, ``/ready`` returns 503, and every prediction
 endpoint returns 503 with a short reason. There is no configuration in which
@@ -28,7 +28,7 @@ verify.
 The model, its metadata and the context feature store are loaded once and held
 in memory; a request touches no disk and no network. XGBoost's prediction
 functions are documented thread-safe for ``gbtree`` boosters as long as nothing
-mutates the model concurrently, which nothing here does -- so the single shared
+mutates the model concurrently, which nothing here does, so the single shared
 booster serves the whole worker thread-pool without a lock.
 See https://xgboost.readthedocs.io/en/stable/prediction.html
 """
@@ -126,7 +126,7 @@ class BodySizeLimitMiddleware:
     the ASGI server will buffer whatever arrives.
 
     So this layer reads the body itself, counting as it goes, and answers 413
-    the moment the cap is passed -- without ever calling the application. Peak
+    the moment the cap is passed, without ever calling the application. Peak
     memory per request is therefore bounded by the cap whether or not the client
     declares a length. The buffered chunks are replayed to the application
     afterwards so nothing downstream can tell the difference.
@@ -134,7 +134,7 @@ class BodySizeLimitMiddleware:
     Written as raw ASGI rather than ``BaseHTTPMiddleware`` for two reasons: it
     has to wrap ``receive``, which ``BaseHTTPMiddleware`` does not expose; and
     an exception raised from inside a wrapped ``receive`` does not propagate
-    cleanly through ``BaseHTTPMiddleware``'s body pump -- it surfaces at the
+    cleanly through ``BaseHTTPMiddleware``'s body pump; it surfaces at the
     route layer as an unrecognised error and FastAPI renders it
     ``400 There was an error parsing the body``. Answering directly sidesteps
     the whole question.
@@ -222,7 +222,7 @@ class ModelBundle:
 
         if not model_path.exists():
             raise ArtifactMissingError(
-                f"{meta_path} exists but {model_path} does not -- the model "
+                f"{meta_path} exists but {model_path} does not; the model "
                 f"directory is incomplete. Refit with `python -m msa.train.final "
                 f"--segment {segment}`."
             )
@@ -248,7 +248,7 @@ class ModelBundle:
         store_path = d / "feature_store.json"
         if not store_path.exists():
             raise ArtifactMissingError(
-                f"{store_path} not found -- the model directory is incomplete"
+                f"{store_path} not found; the model directory is incomplete"
             )
         try:
             self.store = load_store(store_path)
@@ -378,7 +378,7 @@ def request_frame(items: list[PermitRequest], bundle: ModelBundle) -> pd.DataFra
     # `zoning_review_required` is derived from the zoning fee at training time
     # (msa.features.build._application_features); deriving it the same way here
     # rather than hard-coding NaN keeps the training and serving definitions
-    # identical. Missing stays missing -- XGBoost splits on NaN natively, and a
+    # identical. Missing stays missing: XGBoost splits on NaN natively, and a
     # register that publishes no fee breakdown had NaN during training too.
     zoning = pd.to_numeric(frame.get("zoning_fee_usd"), errors="coerce")
     frame["zoning_review_required"] = np.where(zoning.isna(), np.nan, (zoning > 0).astype(float))
@@ -411,7 +411,7 @@ def _request_id(request: Request | None = None) -> str | None:
     Read from ``request.state`` first and the context variable second. The
     500 handler runs *outside* the correlation middleware (Starlette's
     ``ServerErrorMiddleware`` is the outermost layer), by which point the
-    context variable has already been reset -- but ``scope["state"]`` is the
+    context variable has already been reset, but ``scope["state"]`` is the
     same dict the middleware wrote to, so the id survives.
     """
     if request is not None:
@@ -431,7 +431,7 @@ def _error(
     """The single place an error body is constructed.
 
     Nothing derived from an exception object ever reaches this function's
-    ``detail`` -- callers pass a fixed string. Tracebacks, file paths and
+    ``detail``; callers pass a fixed string. Tracebacks, file paths and
     library messages go to the log, keyed by the request id.
     """
     body = ErrorResponse(
@@ -473,7 +473,7 @@ def create_app(
     wants) raises :class:`msa.artifacts.ArtifactError` if the model directory
     is missing, corrupt or schema-incompatible. ``require_model=False`` builds
     a service that starts, reports itself degraded, and returns 503 from every
-    prediction endpoint -- used by the ASGI entrypoint when
+    prediction endpoint, used by the ASGI entrypoint when
     ``MSA_ALLOW_DEGRADED_START=1``.
     """
     configure_logging()
@@ -488,7 +488,7 @@ def create_app(
         load_error = exc
         LOG.critical(
             "model artifact for segment %s could not be loaded; starting in "
-            "DEGRADED mode -- every prediction endpoint will return 503. %s",
+            "DEGRADED mode; every prediction endpoint will return 503. %s",
             segment,
             exc,
             extra={"segment": segment, "artifact_error": type(exc).__name__},
@@ -518,7 +518,7 @@ def create_app(
         yield
 
     app = FastAPI(
-        title="Midwest Solar Analytics -- timeline prediction",
+        title="Midwest Solar Analytics: timeline prediction",
         version="0.1.0",
         lifespan=lifespan,
         description=(
@@ -809,7 +809,7 @@ class _ServiceASGI:
     """The ASGI entrypoint, so that importing this module needs no model on disk.
 
     ``uvicorn msa.serve.app:app`` needs an importable ASGI object, but importing
-    this module must not require a trained model -- otherwise the test suite and
+    this module must not require a trained model; otherwise the test suite and
     the docs tooling cannot import it at all. The app is therefore built on the
     first ASGI event, which under uvicorn is the ``lifespan`` startup: a bad
     artifact aborts startup with a clear message *before* the socket accepts a
@@ -854,10 +854,10 @@ class _ServiceASGI:
     async def _lifespan(self, scope, receive, send) -> None:
         """Handle the lifespan scope so a bad artifact actually stops the server.
 
-        Raising here does **not** work: uvicorn interprets an exception during
+        Raising here does not work: uvicorn interprets an exception during
         the lifespan scope as "this app does not implement the lifespan
         protocol", logs ``ASGI 'lifespan' protocol appears unsupported`` and
-        starts serving anyway -- which is precisely the outcome this service
+        starts serving anyway, which is precisely the outcome this service
         must never have. The ASGI spec's way to refuse startup is to send
         ``lifespan.startup.failed``; uvicorn then logs the message and exits.
         Verified against uvicorn 0.52.1.

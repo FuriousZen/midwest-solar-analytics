@@ -3,8 +3,8 @@
 Consumes ``reports/<segment>/best_params.json`` from the Optuna study (falling
 back to stock hyper-parameters if the study has not been run) and produces:
 
-* ``models/<segment>/model.json``     -- the booster, in XGBoost's own format
-* ``models/<segment>/metadata.json``  -- feature order, categorical levels,
+* ``models/<segment>/model.json``: the booster, in XGBoost's own format
+* ``models/<segment>/metadata.json``: feature order, categorical levels,
   training window, metrics; everything the FastAPI service needs to rebuild an
   identical feature frame at request time
 * an MLflow run tagged ``stage=final`` holding the same metrics plus the logged
@@ -75,7 +75,7 @@ def load_best_params(segment: str) -> tuple[dict, bool, int | None]:
     """Return ``(xgb_params, log1p_target, best_trial_number)``."""
     path = report_dir(segment) / "best_params.json"
     if not path.exists():
-        LOG.warning("%s not found -- falling back to stock hyper-parameters", path)
+        LOG.warning("%s not found; falling back to stock hyper-parameters", path)
         return {}, False, None
     params = json.loads(path.read_text())
     log_target = bool(params.pop("log1p_target", False))
@@ -103,7 +103,7 @@ def fit_quantiles(ds: Dataset, params: dict, log_target: bool):
     A point estimate is close to useless on a target whose IQR spans months, so
     the service publishes p10/p50/p90 as well. XGBoost 3.x fits all three in one
     booster via ``objective="reg:quantileerror"`` with a vector
-    ``quantile_alpha`` (verified empirically against 3.4.0 -- it is accepted
+    ``quantile_alpha`` (verified empirically against 3.4.0: it is accepted
     through ``**kwargs`` and is absent from ``get_params()``).
 
     The tuned tree-shape / regularisation hyper-parameters are reused; only the
@@ -155,7 +155,7 @@ def calibrate_conformal(
 ) -> float:
     """Split-conformal (CQR) widening for the quantile interval.
 
-    Pinball-loss quantiles are not calibrated out of the box -- on this data the
+    Pinball-loss quantiles are not calibrated out of the box; on this data the
     nominal 80% interval empirically covered ~64% of the holdout. Conformalised
     Quantile Regression (Romano, Patterson & Candes, 2019) fixes that with a
     single additive correction estimated on held-out-from-fit data:
@@ -166,7 +166,7 @@ def calibrate_conformal(
     The interval [lo - delta, hi + delta] then has finite-sample coverage of at
     least 1 - alpha, under exchangeability.
 
-    The calibration slice is the **most recent 15% of the training window** --
+    The calibration slice is the most recent 15% of the training window:
     chronological, so it never touches the holdout and never lets future
     information into the fit.
     """
@@ -265,7 +265,7 @@ def run(segment: str, log_to_mlflow: bool = True) -> dict:
     q_test = predict_quantiles(qmodel, ds.X_test, log_target, horizon)
     raw_lo, mid, raw_hi = q_test[:, 0], q_test[:, 1], q_test[:, 2]
     # Clip exactly as msa.serve.app does, so the coverage reported here is the
-    # coverage of the interval a caller actually receives -- not of a wider,
+    # coverage of the interval a caller actually receives, not of a wider,
     # unclipped one that only exists during evaluation.
     lo = np.clip(raw_lo - conformal_delta, 0.0, horizon)
     hi = np.clip(raw_hi + conformal_delta, 0.0, horizon)

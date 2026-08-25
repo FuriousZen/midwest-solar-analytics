@@ -1,7 +1,7 @@
 """Shared fixtures.
 
 Tests never hit the network. Anything that needs canonical records builds them
-from ``synthetic_canonical`` -- a hand-written frame with known properties, used
+from ``synthetic_canonical``, a hand-written frame with known properties, used
 only to exercise transformation logic. It is never used for training or for any
 number that appears in the README.
 """
@@ -68,7 +68,7 @@ def synthetic_canonical() -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 #
 # The serving tests need an artifact that satisfies the full
-# ``msa.artifacts`` contract -- schema version, feature list, categorical
+# ``msa.artifacts`` contract: schema version, feature list, categorical
 # levels, booster, quantile booster, feature store. Building it here (rather
 # than in one test module) lets the hardening tests corrupt *copies* of it
 # without disturbing the happy-path suite.

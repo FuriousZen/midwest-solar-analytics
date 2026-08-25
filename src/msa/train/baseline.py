@@ -1,16 +1,16 @@
-"""Baseline models -- the reference points every later improvement is measured against.
+"""Baseline models: the reference points every later improvement is measured against.
 
 Four baselines, all scored with the *same* 5-fold CV protocol used by the
 Optuna study so the comparison is apples-to-apples:
 
 ``global_median``      predict the training median for everything.
 ``group_median``       predict the median of the (jurisdiction, review_track)
-                       group -- i.e. the rule a permit desk already applies.
+                       group, i.e. the rule a permit desk already applies.
 ``ridge``              Ridge regression on median-imputed numerics + one-hot
                        categoricals.
 ``xgb_default``        ``XGBRegressor()`` with stock library hyper-parameters.
-                       **This is the baseline for the "improvement from
-                       hyper-parameter search" figure.**
+                       This is the baseline for the "improvement from
+                       hyper-parameter search" figure.
 
 Run::
 
@@ -50,7 +50,7 @@ def make_cv(n_splits: int = N_SPLITS) -> KFold:
 
 
 # ---------------------------------------------------------------------------
-# individual baselines -- each returns out-of-fold predictions
+# individual baselines; each returns out-of-fold predictions
 # ---------------------------------------------------------------------------
 
 
@@ -128,7 +128,7 @@ def _oof_sklearn(model_factory, X: pd.DataFrame, y: pd.Series, cv: KFold) -> np.
 
 
 def default_xgb(**overrides) -> XGBRegressor:
-    """Stock XGBRegressor -- only the knobs needed to consume the data at all."""
+    """Stock XGBRegressor with only the knobs needed to consume the data at all."""
     params = {
         "enable_categorical": True,
         "tree_method": "hist",

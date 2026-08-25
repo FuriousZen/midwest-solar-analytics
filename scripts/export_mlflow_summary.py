@@ -2,7 +2,7 @@
 
 The tracking store itself (``mlflow.db`` + ``mlartifacts/``) is gitignored
 because it is large and machine-specific, so this writes the evidence that the
-runs happened -- counts by stage, the full run table, and the top trials -- into
+runs happened (counts by stage, the full run table, and the top trials) into
 ``reports/mlflow_runs_summary.json`` and ``reports/mlflow_runs.csv``, which are
 committed.
 
@@ -37,7 +37,7 @@ def export() -> dict:
     )
     if runs.empty:
         raise RuntimeError(
-            "no MLflow runs found -- run the training pipeline before exporting"
+            "no MLflow runs found; run the training pipeline before exporting"
         )
 
     runs.to_csv(CSV_PATH, index=False)

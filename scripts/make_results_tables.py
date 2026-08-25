@@ -21,7 +21,7 @@ from msa.config import REPORTS_DIR, SEGMENTS, max_timeline_days
 
 #: Where RESULTS.md is written. Overridable so the CI smoke pipeline can
 #: generate its tables into a scratch directory instead of over the committed
-#: docs -- a smoke run must never rewrite the numbers a real run measured.
+#: docs; a smoke run must never rewrite the numbers a real run measured.
 DOCS = Path(os.environ.get("MSA_DOCS_DIR", Path(__file__).resolve().parents[1] / "docs"))
 SEGMENT_ORDER = ("permit_to_completion", "application_to_issue")
 SEGMENT_TITLE = {

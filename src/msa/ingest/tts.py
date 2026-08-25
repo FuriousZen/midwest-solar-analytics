@@ -2,7 +2,7 @@
 
 Provenance
 ----------
-Source   : Lawrence Berkeley National Laboratory, *Tracking the Sun* -- the
+Source   : Lawrence Berkeley National Laboratory, *Tracking the Sun*, the
            public data file of U.S. distributed PV systems compiled from state
            incentive programs, utility interconnection registries and other
            public agencies.
@@ -16,7 +16,7 @@ Important
 ---------
 The public Tracking the Sun file contains exactly ONE date column,
 ``installation_date``. It therefore CANNOT supply a permit-to-completion
-duration and is **not** used as a source of the regression target. It is used
+duration and is not used as a source of the regression target. It is used
 purely as a *utility-records* context layer: rolling market-activity and
 price/technology statistics keyed on (state, ZIP, month) that are joined onto
 the permit records in ``msa.features``.
@@ -40,7 +40,7 @@ EDITION = "2024"
 
 #: Midwest states present in the 2024 edition of the public file.
 #: (IN, IA, MI, NE, ND, SD are not reported; KS/MO appear only in the 2018-2020
-#: editions. Verified by listing the bucket -- `python -m scripts.verify_tts_states`)
+#: editions. Verified by listing the bucket with `python -m scripts.verify_tts_states`.)
 TTS_MIDWEST_STATES: tuple[str, ...] = ("IL", "MN", "OH", "WI")
 
 USE_COLS = [

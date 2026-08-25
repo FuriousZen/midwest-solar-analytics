@@ -2,7 +2,7 @@
 
 Municipal permit registers describe the job in one free-text field. These
 helpers turn that text into the handful of structured attributes the model
-uses, and -- just as importantly -- screen out the non-PV work that the word
+uses, and, just as importantly, screen out the non-PV work that the word
 "solar" also appears in (solariums, solar water heating, solar-control film,
 Solatube skylights).
 """
@@ -14,7 +14,7 @@ import re
 import numpy as np
 import pandas as pd
 
-#: Candidate match. Deliberately **recall-first**: the final bare ``SOLAR``
+#: Candidate match. Deliberately recall-first: the final bare ``SOLAR``
 #: alternative subsumes the specific phrases before it, so in practice this
 #: matches "contains SOLAR, PHOTOVOLT or PV". Municipal scope-of-work text is
 #: written by hundreds of different clerks and contractors ("Tesla Solar Roof",

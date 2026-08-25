@@ -3,7 +3,7 @@
 Every log line the service emits is a single JSON object on one line, so a log
 shipper can index it without a regex. The current request's id is carried in a
 :class:`contextvars.ContextVar` and stamped onto every record emitted while
-handling that request -- including records from libraries that know nothing
+handling that request, including records from libraries that know nothing
 about the web layer (xgboost, pandas, our own feature code).
 
 ``contextvars`` is the right primitive here rather than a thread-local: FastAPI

@@ -2,7 +2,7 @@
 
 Provenance
 ----------
-Source   : City of Saint Paul Open Data (ArcGIS Hub) -- "Approved Building Permits"
+Source   : City of Saint Paul Open Data (ArcGIS Hub), "Approved Building Permits"
 Layer    : https://services1.arcgis.com/9meaaHE3uiba0zr8/arcgis/rest/services/
            Approved_Building_Permits/FeatureServer/0
 Licence  : City of Saint Paul open data.

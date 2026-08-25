@@ -2,7 +2,7 @@
 
 The ingesters hit twelve live municipal portals. The questions that matter are
 not "does the happy path parse" (``test_ingest.py`` covers that) but "what
-happens when a portal 500s, hangs, changes its schema, or returns nothing" --
+happens when a portal 500s, hangs, changes its schema, or returns nothing",
 and, above all, "does one dead jurisdiction take the whole run down with it".
 
 No test here touches the network: ``requests.get`` is replaced with a stub that
@@ -317,7 +317,11 @@ def test_one_dead_source_does_not_kill_the_run(monkeypatch):
 
 
 def test_a_schema_change_in_one_source_is_isolated_too(monkeypatch):
-    """This used to abort the whole ingest: the check sat outside the try."""
+    """A schema change in one source must not abort the whole ingest.
+
+    The canonical-column check sits inside the per-source try; outside it, a
+    renamed upstream column in one register would take every source down.
+    """
     broken = _canonical_rows("broken").drop(columns=["issue_date"])
     _install_sources(
         monkeypatch,
@@ -391,7 +395,7 @@ def test_failures_are_recorded_in_the_dataset_summary(monkeypatch):
 
 
 def test_only_does_not_overwrite_the_corpus(monkeypatch, capsys, tmp_path):
-    """`--only X` used to write a one-source parquet over the twelve-source one."""
+    """`--only X` must not write a one-source parquet over the twelve-source one."""
     import sys
 
     _install_sources(

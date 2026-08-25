@@ -13,7 +13,7 @@ Produces, per segment, under ``reports/<segment>/``:
 
 Exactness note: ``shap.TreeExplainer`` on a gradient-boosted tree computes exact
 Shapley values via TreeSHAP, so these are attributions, not approximations.
-Attributions are in the model's output space -- if the model was fitted on
+Attributions are in the model's output space: if the model was fitted on
 ``log1p(days)``, SHAP values are in log-days and the dashboard says so.
 """
 

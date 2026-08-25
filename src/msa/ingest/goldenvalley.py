@@ -2,14 +2,14 @@
 
 Provenance
 ----------
-Source   : City of Golden Valley GIS -- "Golden_Misc" ArcGIS service,
+Source   : City of Golden Valley GIS, "Golden_Misc" ArcGIS service,
            PIMS permit layers (586 = closed permits, 587 = open permits).
 Layer    : https://gis.goldenvalleymn.gov/server/rest/services/GoldenMap/
            Golden_Misc/FeatureServer/586
 Timeline : ``Applied_Date`` -> ``Issued_Date`` -> ``Final_Date``.
 
 Golden Valley is small (~22k residents) but is the only Midwest register found
-that publishes **all three** milestone dates, so it anchors both segments and
+that publishes all three milestone dates, so it anchors both segments and
 lets ``application_to_completion`` be measured end to end.
 """
 

@@ -28,9 +28,9 @@ src = ["src", "scripts", "tests"]
 [tool.ruff.lint]
 select = [
     "E",    # pycodestyle errors
-    "F",    # pyflakes -- unused imports/names, undefined names
+    "F",    # pyflakes: unused imports/names, undefined names
     "I",    # import ordering
-    "B",    # bugbear -- mutable defaults, shadowed loop vars, silent except
+    "B",    # bugbear: mutable defaults, shadowed loop vars, silent except
     "UP",   # pyupgrade
     "C4",   # comprehension rewrites
     "RUF",  # ruff's own rules

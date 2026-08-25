@@ -2,7 +2,7 @@
 
 Provenance
 ----------
-Source   : City of Minneapolis Open Data (ArcGIS Hub) -- "CCS Permits"
+Source   : City of Minneapolis Open Data (ArcGIS Hub), "CCS Permits"
 Layer    : https://services.arcgis.com/afSMGVsC7QlRK1kZ/arcgis/rest/services/
            CCS_Permits/FeatureServer/0
 Licence  : City of Minneapolis open data, no restrictions on reuse.

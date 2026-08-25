@@ -4,16 +4,16 @@ Provenance
 ----------
 Portal   : data.cincinnati-oh.gov (Socrata), data maintained by CAGIS.
 Dataset A: "Cincinnati Building Permits (Combo) w/ Plan Review Comments",
-           id ``thvx-5mem`` -- the only Cincinnati extract that carries the
+           id ``thvx-5mem``, the only Cincinnati extract that carries the
            free-text scope of work (``desc_of_work``). Used to *identify* solar.
-Dataset B: "Cincinnati Building Permits Timeline", id ``94uh-66xv`` -- the
+Dataset B: "Cincinnati Building Permits Timeline", id ``94uh-66xv``, the
            milestone dates (``applied_date`` -> ``issued_date`` ->
            ``completeddate``). Used to *date* the identified permits.
 Join key : ``number_key``.
 
 Why the join is necessary: the headline "Cincinnati Building Permits"
 (``uhjb-xac9``) has clean dates but its ``description`` column is a 16-value
-category label (``Alteration``, ``HVAC``, ...), not scope text -- searching it
+category label (``Alteration``, ``HVAC``, ...), not scope text; searching it
 for "solar" returns zero rows. Full-text search on that dataset matches the
 street "SOLAR VISTA PL" and contractor names, not the work. So solar has to be
 identified in ``thvx-5mem`` and dated from ``94uh-66xv``.

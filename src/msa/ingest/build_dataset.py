@@ -74,9 +74,9 @@ def build(
     Per-source isolation is the whole point of the ``try``: twelve municipal
     portals will not all be up at once, and one dead jurisdiction must cost the
     run that jurisdiction's rows and nothing else. That includes a source whose
-    *schema* changed -- the canonical-column check therefore sits **inside** the
-    isolation, not after it. (It used to sit outside, so a renamed upstream
-    column in one small register aborted the entire ingest.)
+    *schema* changed, so the canonical-column check sits inside the isolation,
+    not after it; placed outside, a renamed upstream column in one small
+    register would abort the entire ingest.
 
     ``strict=True`` re-raises instead, for CI and for anyone who would rather
     have no dataset than a partial one.
@@ -92,7 +92,7 @@ def build(
             if missing:
                 raise ValueError(
                     f"source {key} is missing canonical columns {missing} "
-                    f"-- upstream schema change?"
+                    f"(upstream schema change?)"
                 )
             if df.empty:
                 raise ValueError(f"source {key} returned no rows")
@@ -200,11 +200,11 @@ def main() -> None:
     df = build(refresh=args.refresh, only=only, strict=args.strict)
 
     if only and not args.write:
-        # `--only` used to overwrite installations.parquet with a corpus
-        # containing just those sources, silently shrinking the dataset every
-        # downstream stage reads. The useful workflow is "refresh one register's
-        # cache, then rebuild the whole thing from cache", so that is the
-        # default; `--write` is the explicit opt-out.
+        # Without `--write`, `--only` must not overwrite installations.parquet
+        # with a corpus containing just those sources; that would silently
+        # shrink the dataset every downstream stage reads. The useful workflow
+        # is "refresh one register's cache, then rebuild the whole thing from
+        # cache", so that is the default and `--write` is the explicit opt-out.
         print(
             f"--only was given ({', '.join(only)}): fetched {len(df):,} rows and "
             f"refreshed their caches, but NOT overwriting {OUT_PARQUET} with a "

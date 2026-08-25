@@ -7,7 +7,7 @@ Protocol
                      ``KFold(shuffle=True)`` cross-validation of the *training*
                      window only. The chronological holdout is never touched
                      during the search.
-* Baseline         : the ``xgb_default`` row from ``msa.train.baseline`` -- the
+* Baseline         : the ``xgb_default`` row from ``msa.train.baseline``, the
                      same 5-fold CV, same folds, stock XGBoost hyper-parameters.
 * Tracking         : one MLflow run per trial (nested inside a parent run),
                      recording every sampled hyper-parameter and the fold-level
@@ -70,7 +70,7 @@ def suggest_params(trial: optuna.Trial) -> dict:
         # Upper bounds chosen so the search spends its budget where the optimum
         # actually lives. On ~8-17k rows with a learning rate that can go as low
         # as 0.005, 1200 trees is already deep into diminishing returns, and
-        # depth > 10 is pure memorisation -- every trial that reached depth 11-12
+        # depth > 10 is pure memorisation: every trial that reached depth 11-12
         # in an exploratory run scored worse than the incumbent while costing
         # 3-6x the fit time.
         "n_estimators": trial.suggest_int("n_estimators", 200, 1200, step=50),

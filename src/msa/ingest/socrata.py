@@ -5,7 +5,7 @@ Reference: https://dev.socrata.com/docs/endpoints.html
 Only the handful of features we need are implemented:
 
 * ``$select`` / ``$where`` / ``$order`` / ``$limit`` / ``$offset`` SoQL clauses
-* keyset-free offset pagination (fine at our volumes -- tens of thousands of rows)
+* keyset-free offset pagination (fine at our volumes, tens of thousands of rows)
 * on-disk caching of the raw CSV so the rest of the pipeline is reproducible
   offline once the download has happened at least once.
 

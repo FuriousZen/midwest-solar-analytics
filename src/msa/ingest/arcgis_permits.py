@@ -1,10 +1,10 @@
 """Declarative ingestion for the ArcGIS-hosted Midwest permit registers.
 
 Detroit MI, Cleveland OH, Naperville IL, Overland Park KS, Ames IA and Bismarck
-ND all publish the same shape of record -- a permit number, a scope-of-work string and two or three
-milestone dates -- behind ArcGIS FeatureServer/MapServer query endpoints. Rather
-than four near-identical modules, each is expressed as a :class:`PermitLayer`
-spec and shares one canonicaliser.
+ND all publish the same shape of record (a permit number, a scope-of-work string
+and two or three milestone dates) behind ArcGIS FeatureServer/MapServer query
+endpoints. Rather than four near-identical modules, each is expressed as a
+:class:`PermitLayer` spec and shares one canonicaliser.
 
 Each spec was verified by fetching the layer's own ``?f=json`` field list before
 being written down; the field names below are the layer's real field names.

@@ -1,9 +1,9 @@
 name: CI
 
 # Three jobs, in increasing order of what they can catch:
-#   lint      -- static problems, seconds
-#   tests     -- unit + serving + ingest-robustness contracts, offline
-#   smoke     -- the whole pipeline end to end on a synthetic corpus, offline
+#   lint:     static problems, seconds
+#   tests:    unit + serving + ingest-robustness contracts, offline
+#   smoke:    the whole pipeline end to end on a synthetic corpus, offline
 #
 # None of them touch the network beyond installing dependencies: the ingesters
 # are exercised against fake HTTP responses and the pipeline runs on a
@@ -78,7 +78,7 @@ jobs:
   audit:
     # Advisory: a *new* CVE in the pinned set should be visible, but the one
     # known finding is documented and unfixable without leaving mlflow's
-    # supported range -- see docs/SECURITY.md.
+    # supported range; see docs/SECURITY.md.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

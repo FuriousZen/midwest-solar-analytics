@@ -1,5 +1,5 @@
 """Tests for the parts of the pipeline that are easy to get subtly wrong:
-target construction, the censoring guard, and -- most importantly -- the
+target construction, the censoring guard, and, most importantly, the
 guarantee that no feature can see the future.
 """
 

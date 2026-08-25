@@ -5,9 +5,9 @@ Validation policy
 Everything a caller can send is bounded, because every unbounded field on a
 public endpoint is either a crash or a memory amplifier waiting to happen:
 
-* ``extra="forbid"`` -- a misspelled field name is a 422, not a silently
+* ``extra="forbid"``: a misspelled field name is a 422, not a silently
   ignored value that makes the caller think they supplied it.
-* ``allow_inf_nan=False`` on every float -- JSON's ``Infinity``/``NaN`` tokens
+* ``allow_inf_nan=False`` on every float: JSON's ``Infinity``/``NaN`` tokens
   are accepted by Python's parser, and ``ge=0`` happily passes ``+inf``. An
   infinite ``reported_cost_usd`` propagates through ``log1p`` and
   ``cost_per_kw`` into a non-finite prediction. Reject at the edge instead.
@@ -154,7 +154,7 @@ class BatchRequest(BaseModel):
         max_length=MAX_BATCH_ITEMS,
         description=(
             f"Up to {MAX_BATCH_ITEMS} projects. `?explain=true` is only honoured "
-            f"for batches of {MAX_EXPLAIN_BATCH_ITEMS} or fewer -- TreeSHAP over "
+            f"for batches of {MAX_EXPLAIN_BATCH_ITEMS} or fewer; TreeSHAP over "
             "a large batch costs far more than the prediction itself."
         ),
     )

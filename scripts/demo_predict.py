@@ -58,8 +58,8 @@ async def _run(segment: str, url: str | None) -> None:
     # httpx.ASGITransport implements AsyncBaseTransport and is documented as
     # requiring AsyncClient (https://www.python-httpx.org/advanced/transports/).
     # Pairing it with the synchronous Client raises
-    # "'ASGITransport' object has no attribute '__enter__'", which is what this
-    # script used to do -- so the demo could never actually run in-process.
+    # "'ASGITransport' object has no attribute '__enter__'", and the demo
+    # cannot run in-process at all.
     if url:
         client = httpx.AsyncClient(base_url=url, timeout=30)
     else:

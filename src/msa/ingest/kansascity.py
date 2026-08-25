@@ -2,11 +2,11 @@
 
 Provenance
 ----------
-Source A : data.kcmo.org (Socrata) -- "Permits - CPD Dataset", id ``ntw8-aacc``
+Source A : data.kcmo.org (Socrata), "Permits - CPD Dataset", id ``ntw8-aacc``
            Dates ``applieddate`` -> ``issueddate`` -> ``completeddate``.
            Deep history (1990s -> 2025-05) with contractor names, but the feed
            stopped updating in mid-2025.
-Source B : data.kcmo.org (Socrata) -- "City Issued Permits", id ``w8jz-wjgn``
+Source B : data.kcmo.org (Socrata), "City Issued Permits", id ``w8jz-wjgn``
            Dates ``application_date`` -> ``issue_date`` -> ``finaled_date``.
            Live daily feed, but no contractor and no cost breakdown.
 

@@ -71,10 +71,10 @@ def build_store(X: pd.DataFrame, meta: pd.DataFrame, raw: pd.DataFrame) -> dict:
     order = meta["start_date"]
     raw = raw.set_index("record_id").reindex(meta["record_id"]).reset_index()
 
-    # `source` is a trained categorical level. Serving used to stamp a literal
-    # "api", which is not a level the booster ever saw, so every request silently
-    # landed in the missing branch of that split. Learn the jurisdiction -> source
-    # mapping instead and replay it at request time.
+    # `source` is a trained categorical level. Stamping a literal such as "api"
+    # at serving time, which is not a level the booster ever saw, would send
+    # every request silently down the missing branch of that split. Learn the
+    # jurisdiction -> source mapping here and replay it at request time.
     juris_source = (
         pd.DataFrame(
             {"jurisdiction": meta["jurisdiction"].to_numpy(), "source": raw["source"].to_numpy()}
@@ -130,7 +130,7 @@ def apply_store(rows: pd.DataFrame, store: dict) -> pd.DataFrame:
         An unmatched key must yield NaN, not the training median. Training
         encoded "no history" as NaN (see ``_contractor_features``), so filling a
         median here would tell the booster that an unknown contractor is an
-        *average* contractor -- a different, and more confident, claim than the
+        *average* contractor: a different, and more confident, claim than the
         one the model was trained to handle. XGBoost has a learned missing
         branch for exactly this case; use it.
         """

@@ -70,7 +70,7 @@ def main() -> int:
         "mlflow.pyfunc.log_model(python_model=, artifacts=)",
         {"python_model", "artifacts"}
         <= set(inspect.signature(mlflow.pyfunc.log_model).parameters),
-        "the servable flavour -- the xgboost one cannot round-trip categoricals",
+        "the servable flavour; the xgboost one cannot round-trip categoricals",
     )
 
     import shap

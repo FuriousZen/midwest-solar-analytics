@@ -26,7 +26,7 @@ REPORTS_DIR = Path(os.environ.get("MSA_REPORTS_DIR", REPO_ROOT / "reports"))
 # MLflow tracking store. MLflow 3.x refuses the legacy ./mlruns file store, so
 # we use the SQLite backend it recommends. Both the DB and the artifact root
 # live inside the repo and are gitignored; a summary export is committed
-# instead -- see scripts/export_mlflow_summary.py
+# instead (see scripts/export_mlflow_summary.py).
 MLFLOW_TRACKING_URI = os.environ.get(
     "MLFLOW_TRACKING_URI", f"sqlite:///{REPO_ROOT / 'mlflow.db'}"
 )
@@ -123,7 +123,7 @@ DEFAULT_SEGMENT = os.environ.get("MSA_SEGMENT", "permit_to_completion")
 #: The upper bound is the horizon the service predicts within; jobs that take
 #: longer are treated as out of scope rather than silently squashed into the
 #: target distribution. Realised coverage differs per segment and is recorded
-#: below -- see data/processed/dataset_summary.json and
+#: below; see data/processed/dataset_summary.json and
 #: reports/horizon_coverage.json for the numbers behind it.
 MIN_TIMELINE_DAYS = 0
 #: Coverage of the observed duration distribution at each bound, measured on

@@ -6,15 +6,15 @@ A model directory is only usable if *every* one of these holds:
    ``artifact_schema_version`` this build of the code understands.
 2. Its ``features`` list is byte-identical to ``msa.features.build.FEATURES``.
    A model fitted before a feature was added or reordered will still *load*
-   into XGBoost and still return floats -- it will simply return floats about
+   into XGBoost and still return floats; it will simply return floats about
    a different question. That is the failure mode this check exists to stop.
 3. Every categorical feature has a level list, so the serving frame can be
    built with exactly the categories the booster was fitted on.
 4. ``model.json`` exists and parses as a booster whose feature count matches.
 
 Anything short of that raises an :class:`ArtifactError`. Each error carries a
-``public_reason`` -- a short, path-free string safe to return to an HTTP client
--- separately from ``str(exc)``, which names files and belongs only in the log.
+``public_reason``, a short, path-free string safe to return to an HTTP client,
+separately from ``str(exc)``, which names files and belongs only in the log.
 
 Bump ``ARTIFACT_SCHEMA_VERSION`` whenever the meaning of a field in
 ``metadata.json`` changes, or whenever a serving-side change stops being able
@@ -71,7 +71,7 @@ def model_fingerprint(model_path: Path) -> str:
 
     Used as the stable part of ``model_version``. Unlike an mtime it does not
     change when the file is merely copied, and it *does* change when a single
-    byte of the booster changes -- which is what a version stamp has to promise.
+    byte of the booster changes, which is what a version stamp has to promise.
     """
     h = hashlib.sha256()
     with model_path.open("rb") as fh:
@@ -81,7 +81,7 @@ def model_fingerprint(model_path: Path) -> str:
 
 
 def build_model_version(segment: str, model_path: Path, trained_at: str) -> str:
-    """``<segment>-<YYYYMMDD>-<content hash>`` -- readable and content-bound."""
+    """``<segment>-<YYYYMMDD>-<content hash>``: readable and content-bound."""
     day = trained_at[:10].replace("-", "")
     return f"{segment}-{day}-{model_fingerprint(model_path)}"
 
@@ -90,7 +90,7 @@ def read_metadata(path: Path) -> dict[str, Any]:
     """Load ``metadata.json``, distinguishing 'absent' from 'unreadable'."""
     if not path.exists():
         raise ArtifactMissingError(
-            f"{path} not found -- run `python -m msa.train.final "
+            f"{path} not found; run `python -m msa.train.final "
             f"--segment {path.parent.name}` first"
         )
     try:

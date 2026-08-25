@@ -2,7 +2,7 @@
 
 Two things are checked here that nothing else covers:
 
-1. Everything ``msa.train.final`` writes is loadable by ``msa.serve`` -- the
+1. Everything ``msa.train.final`` writes is loadable by ``msa.serve``: the
    round trip, not each half in isolation.
 2. The model logged to MLflow can actually be *served*. The xgboost flavour
    could not: MLflow serves a DataFrame as JSON, JSON has no categorical
@@ -90,7 +90,7 @@ def _serving_frame(model_root) -> pd.DataFrame:
     """A frame shaped exactly like what MLflow hands a served model.
 
     Built by round-tripping through JSON, so the categorical dtype really is
-    gone -- which is the whole point of the test.
+    gone, which is the whole point of the test.
     """
     from msa.serve.app import request_frame
     from msa.serve.schemas import PermitRequest

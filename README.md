@@ -1,12 +1,12 @@
 # Midwest Solar Analytics
 
 End-to-end ML pipeline that predicts how long a distributed solar PV project
-takes, trained on **29,425 real solar permit records** scraped from twelve
+takes, trained on 29,425 real solar permit records scraped from twelve
 municipal open-data registers across eight Midwest states, plus utility
 interconnection records from LBNL's *Tracking the Sun*.
 
-XGBoost regression · Optuna (5-fold CV; **136 trials** for model A, **20** for
-model B — neither study ran the full 200, see below) · MLflow tracking · SHAP
+XGBoost regression · Optuna (5-fold CV; 136 trials for model A, 20 for
+model B; neither study ran the full 200, see below) · MLflow tracking · SHAP
 attribution dashboard · FastAPI prediction service with a latency benchmark.
 
 ## What it predicts
@@ -63,7 +63,7 @@ every metric below is conditional on it. Neither study ran to 200
 trials: model A's was stopped at 136 and the final model was fitted
 from those; model B's was deliberately run short.
 
-| | Model A — installation timeline | Model B — permit review |
+| | Model A: installation timeline | Model B: permit review |
 |---|---:|---:|
 | Optuna trials completed | 136 | 20 |
 | training rows | 8,117 | 16,684 |
@@ -105,38 +105,38 @@ scripts/smoke_pipeline.py  the whole chain, offline, in a scratch directory
 ```
 
 Key design decisions, with the evidence behind them, are in
-**[docs/METHODOLOGY.md](docs/METHODOLOGY.md)**. The short version:
+[docs/METHODOLOGY.md](docs/METHODOLOGY.md). The short version:
 
-* **Every feature must be computable on the day the clock starts.** Contractor
+* Every feature must be computable on the day the clock starts. Contractor
   history is an expanding mean over *strictly earlier* jobs; jurisdiction
   turnaround uses only permits *already closed*; the open-permit backlog uses
   only what is observable at time *t*. Five tests enforce this, including one
   that shuffles the target and requires R² < 0.05.
-* **Absolute time indices are excluded — and the ablation does not support the
-  reason originally given.** `start_year` and days-since-start were left out on
+* Absolute time indices are excluded, and the ablation does not support the
+  reason originally given. `start_year` and days-since-start were left out on
   the theory that they let the booster memorise each period's level: inflating
   random-fold CV and collapsing on a chronological holdout. `make ablate` now
   measures that on this corpus (`reports/ablation_time_features.json`, stock
   XGBoost, same folds), and it comes out the other way round:
 
-  | segment | holdout R² **with** time indices | **without** (shipped) | cost of excluding |
+  | segment | holdout R² with time indices | without (shipped) | cost of excluding |
   |---|---:|---:|---:|
   | `permit_to_completion` | −0.373 | −0.520 | **−0.147** |
   | `application_to_issue` | +0.109 | +0.082 | **−0.027** |
 
   CV R² is essentially unchanged either way (±0.002), so the predicted CV
   inflation does not appear at all, and excluding the indices makes the
-  chronological holdout *worse*, not better. The features stay excluded — the
+  chronological holdout *worse*, not better. The features stay excluded: the
   leakage argument for keeping a model free of absolute time is about what
   happens when it is asked to score a date beyond its training range, which this
   holdout does not test, and both holdout R² values for model A are poor in
   absolute terms regardless. But the stated empirical justification is not
   supported by the measurement, and is recorded here as such rather than
   quietly dropped.
-* **The holdout is chronological *within each jurisdiction*.** A single global
+* The holdout is chronological *within each jurisdiction*. A single global
   cut-off would also change the mix of cities, confounding "generalises forward
   in time" with "generalises to a new city".
-* **Right-censoring is handled explicitly.** Projects starting within one
+* Right-censoring is handled explicitly. Projects starting within one
   horizon of the snapshot are dropped, because only the fast ones could have
   finished in time to appear in the extract.
 
@@ -157,20 +157,20 @@ curl -s -X POST 'http://127.0.0.1:8000/predict?explain=true' \
   }'
 ```
 
-Returns a point estimate, an **80% prediction interval** (p10/p90 from a
+Returns a point estimate, an 80% prediction interval (p10/p90 from a
 companion multi-quantile booster), the implied completion date, and the ranked
 SHAP attributions for that single prediction.
 
 | Endpoint | Purpose |
 |---|---|
 | `GET /health` | liveness; model identity, version, training date and window |
-| `GET /ready` | readiness; 200 only if the model is loaded **and** just scored a canary row, else 503 |
+| `GET /ready` | readiness; 200 only if the model is loaded and just scored a canary row, else 503 |
 | `GET /metadata` | full model card: metrics, features, feature-store date |
 | `POST /predict` | one project; `?explain=true` adds SHAP attributions |
 | `POST /predict/batch` | up to 1000 projects per call |
 | `GET /metrics` | in-process request counters and latency percentiles |
 
-Only `jurisdiction` and `start_date` are required — open-permit records are
+Only `jurisdiction` and `start_date` are required: open-permit records are
 routinely incomplete, and XGBoost consumes missing numerics natively.
 
 ---
@@ -184,7 +184,7 @@ plots for the top drivers, and a per-jurisdiction driver breakdown. Raw
 attributions are also written to `shap_values.parquet` so a stakeholder can join
 them onto their own permits.
 
-Attributions come from `shap.TreeExplainer`, which computes **exact** Shapley
+Attributions come from `shap.TreeExplainer`, which computes exact Shapley
 values on a gradient-boosted tree, not an approximation.
 
 ---
@@ -199,12 +199,12 @@ cases were additionally exercised against a real `uvicorn` process.
 contract (`src/msa/artifacts.py`) before the process will serve anything:
 schema version, the exact feature list, categorical levels for every
 categorical column, the booster's own feature count, and a canary prediction
-that must return a finite number. If any check fails the process **refuses to
-start** — `uvicorn` logs the reason and exits 3 without binding the socket.
+that must return a finite number. If any check fails the process refuses to
+start: `uvicorn` logs the reason and exits 3 without binding the socket.
 
 ```bash
 $ MSA_MODELS_DIR=/tmp/empty uvicorn msa.serve.app:app
-CRITICAL msa.serve.app: refusing to start: .../metadata.json not found --
+CRITICAL msa.serve.app: refusing to start: .../metadata.json not found;
          run `python -m msa.train.final --segment permit_to_completion` first.
 ERROR    uvicorn.error: Application startup failed. Exiting.
 $ echo $?
@@ -219,28 +219,28 @@ There is no configuration in which the service starts and quietly serves
 numbers from an artifact it could not verify.
 
 **Why a schema version matters.** A model fitted before a feature was added
-still loads into XGBoost and still returns floats — floats that answer a
+still loads into XGBoost and still returns floats: floats that answer a
 different question. The feature-list check is what turns that into a startup
 failure instead of a silent wrong answer.
 
 **Versioning.** `model_version` is `<segment>-<YYYYMMDD>-<sha256[:12] of
 model.json>`: content-bound, so it changes if a single byte of the booster
 changes and is stable across a copy. It appears on `/health`, `/ready`,
-`/metrics` and on **every prediction**, so any answer can be traced back to the
+`/metrics` and on every prediction, so any answer can be traced back to the
 artifact that produced it.
 
 **Validation.** Every field is bounded. Strings are length-capped, numerics are
 range-capped, dates must be plausible, unknown fields are rejected
-(`extra="forbid"`), and `Infinity`/`NaN` — which Python's JSON parser accepts,
-and which sail straight through a `ge=0` bound — are rejected outright. Batches
-are capped at 1000 items and bodies at 4 MiB (413) — enforced by counting
+(`extra="forbid"`), and `Infinity`/`NaN` (which Python's JSON parser accepts,
+and which sail straight through a `ge=0` bound) are rejected outright. Batches
+are capped at 1000 items and bodies at 4 MiB (413), enforced by counting
 bytes as they arrive, so a `Transfer-Encoding: chunked` upload that declares no
 length is bounded too. Twenty-seven malformed
 single payloads and seven malformed batch payloads are asserted to return 422,
 never 500.
 
 **Errors.** Responses carry `{error, detail, request_id}` and nothing else. No
-exception text, no traceback, no filesystem path — a test greps every error
+exception text, no traceback, no filesystem path; a test greps every error
 path for those patterns. The detail goes to the log instead, keyed by the same
 `request_id`.
 
@@ -267,7 +267,7 @@ booster, so extra concurrency buys queueing, not work. Scale by adding workers.
 **Environment variables.** `MSA_SERVE_SEGMENT`, `MSA_MODELS_DIR`,
 `MSA_ALLOW_DEGRADED_START`, `MSA_MAX_BODY_BYTES`, `MSA_MAX_CONCURRENT_EXPLAIN`,
 `MSA_LOG_LEVEL`, `MSA_LOG_FORMAT`. No secrets are read at request time; see
-**[docs/SECURITY.md](docs/SECURITY.md)**.
+[docs/SECURITY.md](docs/SECURITY.md).
 
 ## Licence / attribution
 

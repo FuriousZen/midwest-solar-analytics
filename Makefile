@@ -46,7 +46,7 @@ test: ## run the test suite
 lint: ## static checks (same command CI runs)
 	.venv/bin/ruff check .
 
-audit: ## known CVEs in the pinned environment -- see docs/SECURITY.md
+audit: ## known CVEs in the pinned environment (see docs/SECURITY.md)
 	.venv/bin/pip-audit -r requirements.lock.txt --progress-spinner off
 
 smoke: ## whole pipeline end to end, offline, in a temp dir (~3 min)
@@ -58,7 +58,7 @@ ablate: ## measure what absolute time indices cost on the chronological holdout
 mlflow-summary: ## export the committable MLflow run summary
 	$(PY) -m scripts.export_mlflow_summary
 
-results: ## regenerate docs/RESULTS.md and the README results block
+results: ## regenerate docs/RESULTS.md from the measured artifacts
 	$(PY) -m scripts.make_results_tables
 
 pipeline: ## everything, both segments, end to end

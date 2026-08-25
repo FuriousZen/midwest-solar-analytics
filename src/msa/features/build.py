@@ -1,20 +1,20 @@
 """Feature engineering for the installation-timeline regression.
 
-Design rule: **every feature must be computable from information available on
-the day the application is filed** (``start_date``). Nothing may depend on
+Design rule: every feature must be computable from information available on
+the day the application is filed (``start_date``). Nothing may depend on
 ``end_date`` of the record itself or of any other record, because ``end_date``
 is exactly what the model predicts and would not be known at serving time for
 in-flight permits.
 
 Three families of features are produced:
 
-1. ``application``  -- attributes of the job itself (size, cost, review track,
+1. ``application``: attributes of the job itself (size, cost, review track,
    calendar seasonality, geography).
-2. ``contractor``   -- strictly-backward-looking history for the contractor on
+2. ``contractor``: strictly-backward-looking history for the contractor on
    the permit (how many jobs they have filed before, how long those took).
    Implemented as an expanding mean over *prior* records only, so it is a
    causal statistic rather than target leakage.
-3. ``market``       -- jurisdiction workload in the trailing 30/90 days, plus
+3. ``market``: jurisdiction workload in the trailing 30/90 days, plus
    utility-record context from LBNL Tracking the Sun as of the application
    date (cumulative installs / median system size / median $ per watt in the
    applicant's ZIP and state).
@@ -126,7 +126,7 @@ def back_transform(pred, log_target: bool, horizon: float):
     * ``NaN`` must never reach the API response: bare ``NaN`` is not valid JSON
       and strict clients reject the whole payload.
 
-    Clamping to ``[0, horizon]`` is not a fudge -- training targets are bounded
+    Clamping to ``[0, horizon]`` is not a fudge: training targets are bounded
     by the horizon by construction (see ``msa.config``), so a prediction outside
     it is outside the model's declared range.
     """
@@ -278,8 +278,8 @@ def _contractor_features(df: pd.DataFrame) -> pd.DataFrame:
 
     # NB: ``transform`` preserves the caller's row order. ``apply`` returns rows
     # grouped by key, which silently misaligns when the result is written back
-    # positionally -- that produced a contractor's *own* target leaking into its
-    # first record. Covered by
+    # positionally, leaking a contractor's *own* target into its first record.
+    # Covered by
     # tests/test_features.py::test_contractor_history_excludes_the_current_row
     prior_n = grp.cumcount().to_numpy()
     prior_mean = grp[TARGET].transform(
@@ -302,12 +302,12 @@ def _contractor_features(df: pd.DataFrame) -> pd.DataFrame:
 def _queue_features(df: pd.DataFrame) -> pd.DataFrame:
     """Reviewer-queue state observable on the application date.
 
-    * ``jurisdiction_open_permits`` -- applications already filed but not yet
+    * ``jurisdiction_open_permits``: applications already filed but not yet
       issued as of ``start_date``. Whether a *previous* permit is still open is
       known on day ``t``; only its eventual issue date is unknown, and that is
       not used.
-    * ``jurisdiction_issued_prev_30d`` -- desk throughput over the past month.
-    * ``jurisdiction_recent_*_days_*`` -- the realised turnaround of permits
+    * ``jurisdiction_issued_prev_30d``: desk throughput over the past month.
+    * ``jurisdiction_recent_*_days_*``: the realised turnaround of permits
       *already issued* before ``start_date``. Those durations are fully
       observed at time ``t``, so this is the single most informative
       leak-free signal about the desk's current speed.
@@ -343,7 +343,7 @@ def _queue_features(df: pd.DataFrame) -> pd.DataFrame:
         # Realised turnaround of jobs already *finished* before t, over an exact
         # window [t - W, t). Order statistics need the slice itself, so the
         # targets are sorted by completion date once and then sliced with
-        # searchsorted -- O(n log n) plus one pass per window.
+        # searchsorted: O(n log n) plus one pass per window.
         order = np.argsort(sub["end_date"].to_numpy("datetime64[ns]"), kind="stable")
         ends_sorted = sub["end_date"].to_numpy("datetime64[ns]")[order]
         y_sorted = sub[TARGET].to_numpy(dtype=float)[order]
@@ -388,7 +388,7 @@ def _rolling_application_counts(df: pd.DataFrame) -> pd.DataFrame:
         for window, name in ((30, "30d"), (90, "90d"), (365, "365d")):
             # `side="left"` on both ends counts applications filed STRICTLY
             # before t. Counting same-day siblings would mean the feature
-            # depended on filings that happened later the same calendar day --
+            # depended on filings that happened later the same calendar day,
             # a (small) look-ahead, since these registers are day-resolution and
             # give no intra-day ordering.
             hi = np.searchsorted(starts, t, side="left")

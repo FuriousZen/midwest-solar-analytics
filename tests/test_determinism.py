@@ -2,17 +2,17 @@
 
 Every number in the documentation is quoted as if re-running the command would
 produce it again. That is only true if the seeded paths are genuinely
-deterministic -- the CV folds, the booster fit, the chronological split, and
+deterministic: the CV folds, the booster fit, the chronological split, and
 the content hash that becomes the model version.
 
 Verified at the repository scale as well as here: two independent
 ``python -m msa.train.final`` runs of both segments, in separate processes,
-produced byte-identical boosters --
+produced byte-identical boosters,
 
     permit_to_completion-20260809-7c548d88b141   (run 1 and run 2)
     application_to_issue-20260809-187cc3a37e74   (run 1 and run 2)
 
--- and identical metrics to every reported decimal. Reproduce with::
+and identical metrics to every reported decimal. Reproduce with::
 
     make final SEGMENT=permit_to_completion   # twice; compare model_version
 """

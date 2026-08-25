@@ -37,4 +37,4 @@ echo "==> 8/8 regenerate docs/RESULTS.md from the measured artifacts"
 $PY -m scripts.make_results_tables
 
 echo
-echo "done. Every number in README.md / docs/RESULTS.md now comes from reports/."
+echo "done. Every number in docs/RESULTS.md now comes from reports/."

@@ -114,7 +114,7 @@ def request_with_retries(
                 attempt + 1,
                 max_attempts,
             )
-        # no backoff after the final attempt -- it would delay a failure that
+        # no backoff after the final attempt; it would delay a failure that
         # has already been decided
         if attempt < max_attempts - 1:
             sleep(_sleep_for(attempt))

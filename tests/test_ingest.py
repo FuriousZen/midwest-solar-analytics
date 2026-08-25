@@ -1,6 +1,6 @@
 """Tests for the ingestion layer.
 
-These exercise the parsing and normalisation logic on fixed inputs -- no
+These exercise the parsing and normalisation logic on fixed inputs with no
 network calls, so the suite runs offline and deterministically. Each ingester's
 ``to_canonical`` is fed a miniature version of its real source payload.
 """

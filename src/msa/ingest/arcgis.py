@@ -7,7 +7,7 @@ FeatureServer layers. The query endpoint is anonymous and needs no key, but it
 caps each response (usually 1000-2000 features) and signals truncation with
 ``exceededTransferLimit``; we page with ``resultOffset``/``resultRecordCount``.
 
-Dates come back as epoch **milliseconds** in UTC when ``f=json``.
+Dates come back as epoch milliseconds in UTC when ``f=json``.
 """
 
 from __future__ import annotations
@@ -34,10 +34,10 @@ MAX_PAGES = 500
 def _get_json(url: str, params: dict) -> dict:
     """One FeatureServer request.
 
-    ArcGIS is unusual in answering **HTTP 200 with an ``error`` object** for
+    ArcGIS is unusual in answering HTTP 200 with an ``error`` object for
     application-level failures (bad field name, layer deleted, token expired).
     That is a permanent condition, so it is raised immediately rather than
-    retried -- the transport-level retrying happens one layer down.
+    retried; the transport-level retrying happens one layer down.
     """
     resp = request_with_retries(
         url, params, timeout=_TIMEOUT, source=f"arcgis:{url}"
@@ -66,8 +66,8 @@ def _get_json(url: str, params: dict) -> dict:
 def parse_esri_date(series: pd.Series) -> pd.Series:
     """Normalise an ArcGIS date column to naive daily timestamps.
 
-    ArcGIS returns ``esriFieldTypeDate`` as epoch **milliseconds** but
-    ``esriFieldTypeDateOnly`` as an ISO ``YYYY-MM-DD`` **string**, and different
+    ArcGIS returns ``esriFieldTypeDate`` as epoch milliseconds but
+    ``esriFieldTypeDateOnly`` as an ISO ``YYYY-MM-DD`` string, and different
     layers use different types for the same concept (Detroit's BSEED layer uses
     DateOnly; Minneapolis uses Date). Handle both rather than guessing.
     """

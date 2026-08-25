@@ -18,8 +18,8 @@ categorical levels the booster was fitted on before predicting, and returns
 days rather than raw booster output, so what the registry serves is the same
 quantity the API serves.
 
-The class deliberately imports nothing from ``msa`` at inference time -- its
-whole configuration travels with it in ``metadata.json`` -- so a consumer can
+The class deliberately imports nothing from ``msa`` at inference time (its
+whole configuration travels with it in ``metadata.json``), so a consumer can
 load it with ``mlflow.pyfunc.load_model`` without this repository installed.
 """
 
@@ -38,7 +38,7 @@ METADATA_ARTIFACT = "metadata"
 
 
 class TimelineModel(mlflow.pyfunc.PythonModel):
-    """Predicts timeline **days** from a plain, JSON-round-trippable frame."""
+    """Predicts timeline days from a plain, JSON-round-trippable frame."""
 
     def load_context(self, context):  # pragma: no cover - exercised via pyfunc
         import xgboost as xgb
@@ -83,7 +83,7 @@ def json_safe_example(X: pd.DataFrame) -> pd.DataFrame:
     """A DataFrame that survives MLflow's JSON serving round trip.
 
     Categorical columns become strings and missing stays missing, which is
-    exactly what a serving request looks like -- so the example MLflow
+    exactly what a serving request looks like, so the example MLflow
     validates is the shape a real caller sends.
     """
     out = X.copy()

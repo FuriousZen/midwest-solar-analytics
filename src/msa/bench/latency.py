@@ -4,7 +4,7 @@ Two modes:
 
 ``--mode inprocess`` (default)
     Drives the ASGI app through ``httpx.ASGITransport``. This measures
-    validation + feature assembly + booster inference without a network hop --
+    validation + feature assembly + booster inference without a network hop:
     the fair number for "how long does the service take to answer".
 
 ``--mode http --url http://127.0.0.1:8000``
@@ -14,21 +14,21 @@ Two modes:
 Each mode measures three things, because a serial p95 on its own says nothing
 about behaviour under load:
 
-* **serial** -- one request at a time; the latency a single caller sees.
-* **concurrent** -- N requests in flight at once, at several values of N,
+* serial: one request at a time; the latency a single caller sees.
+* concurrent: N requests in flight at once, at several values of N,
   reporting both the latency distribution and sustained throughput. This is
   where a shared-model bug or a lock contention problem shows up.
-* **batch** -- the ``/predict/batch`` endpoint, per call and per project.
+* batch: the ``/predict/batch`` endpoint, per call and per project.
 
 Results are written to ``reports/latency_<mode>_<segment>.json``. Payloads are
 sampled from the held-out set so the request distribution matches reality
 rather than one hand-picked example.
 
-Implementation note: ``httpx.ASGITransport`` is async-only -- it implements
-``AsyncBaseTransport`` and has no ``__enter__`` -- so the in-process driver
+Implementation note: ``httpx.ASGITransport`` is async-only (it implements
+``AsyncBaseTransport`` and has no ``__enter__``), so the in-process driver
 runs on ``asyncio`` with ``httpx.AsyncClient``. Pairing it with the synchronous
 ``httpx.Client`` raises ``AttributeError: 'ASGITransport' object has no
-attribute '__enter__'``, which is what this module used to do.
+attribute '__enter__'``.
 See https://www.python-httpx.org/advanced/transports/
 
 Run::

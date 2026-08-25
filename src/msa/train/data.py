@@ -31,7 +31,7 @@ TEST_FRACTION = 0.20
 #: time period, which confounds "does this generalise forward in time?" with
 #: "does this generalise to a different city?". Splitting inside each
 #: jurisdiction isolates the temporal question. The global split is still
-#: computed and reported alongside it -- see reports/final_metrics.json.
+#: computed and reported alongside it; see reports/final_metrics.json.
 DEFAULT_SPLIT_STRATEGY = "by_jurisdiction"
 
 
@@ -82,7 +82,7 @@ class Dataset:
 def load_raw(path=DATASET_PATH) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(
-            f"{path} not found -- run `python -m msa.ingest.build_dataset` first"
+            f"{path} not found; run `python -m msa.ingest.build_dataset` first"
         )
     return pd.read_parquet(path)
 

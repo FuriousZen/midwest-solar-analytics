@@ -1,9 +1,9 @@
 """Run the whole pipeline end to end, offline, in a scratch directory.
 
 This is the fast, network-free equivalent of ``./scripts/run_pipeline.sh``:
-it exercises every real entrypoint -- baselines, Optuna, final fit, SHAP
+it exercises every real entrypoint (baselines, Optuna, final fit, SHAP
 dashboard, the FastAPI service, the latency benchmark, the MLflow export and
-the results generator -- against a small synthetic corpus.
+the results generator) against a small synthetic corpus.
 
 It exists so CI can prove the *chain* still works after every change, which is
 a different question from whether the units work. A broken hand-off between
@@ -13,7 +13,7 @@ Nothing it writes touches the repository: paths, the MLflow store and the docs
 output directory are all redirected into ``--root`` (a temp directory by
 default) via the environment, before ``msa`` is imported.
 
-It is **not** a measurement. The corpus is generated, so no number it prints
+It is not a measurement. The corpus is generated, so no number it prints
 means anything about solar permits; the only assertion is that each stage
 produces the artifact the next stage needs.
 
@@ -230,7 +230,7 @@ def main() -> None:
     (data / "processed" / "dataset_summary.json").write_text(
         json.dumps(
             {
-                "GENERATED": "synthetic smoke corpus -- not a measurement",
+                "GENERATED": "synthetic smoke corpus, not a measurement",
                 "total_records": len(frame),
                 "rows_with_usable_duration_by_segment": {
                     "permit_to_completion": len(frame),

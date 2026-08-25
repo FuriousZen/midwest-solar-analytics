@@ -1,11 +1,11 @@
 """Failure modes of the prediction service, exercised rather than assumed.
 
-Every test here breaks something on purpose -- deletes an artifact, truncates
-one, bumps a schema version, sends a hostile payload, fires concurrent requests
--- and asserts on what the caller actually receives. The rule being enforced
-throughout: **the service either answers correctly or refuses clearly. It never
+Every test here breaks something on purpose (deletes an artifact, truncates
+one, bumps a schema version, sends a hostile payload, fires concurrent requests)
+and asserts on what the caller actually receives. The rule being enforced
+throughout: the service either answers correctly or refuses clearly. It never
 starts up and silently returns numbers it cannot stand behind, and it never
-leaks an internal exception, a traceback or a filesystem path to a client.**
+leaks an internal exception, a traceback or a filesystem path to a client.
 """
 
 from __future__ import annotations
@@ -437,7 +437,7 @@ def test_unknown_jurisdiction_and_contractor_still_answer(client):
 
 
 def test_internal_failure_returns_a_bare_500_with_no_exception_text(model_root, caplog):
-    """A previous review caught `detail=str(exc)` leaking. Prove it cannot recur."""
+    """Exception text must never reach a client through `detail`; pin it."""
     app = create_app(SEGMENT, root=model_root)
     bundle = app.state.bundle
 
@@ -466,7 +466,7 @@ def test_internal_failure_returns_a_bare_500_with_no_exception_text(model_root, 
     assert body["request_id"]
     assert "secret detail" not in r.text
     assert_no_leak(r.text)
-    # the detail is not lost -- it went to the log, keyed by the same id
+    # the detail is not lost; it went to the log, keyed by the same id
     assert any("secret detail" in rec.getMessage() or
                (rec.exc_info and "secret detail" in str(rec.exc_info[1]))
                for rec in caplog.records)
@@ -618,7 +618,7 @@ def _measure_explain_concurrency(bundle, n_threads: int) -> int:
     """Peak simultaneous TreeSHAP calls when ``n_threads`` explain at once.
 
     The instrumented ``shap_values`` sleeps, so threads genuinely overlap
-    rather than finishing before the next one starts -- otherwise the peak
+    rather than finishing before the next one starts; otherwise the peak
     would be 1 regardless of whether any cap exists.
     """
     import time as _time
