@@ -3,8 +3,8 @@
 Detroit MI, Cleveland OH, Naperville IL, Overland Park KS, Ames IA and Bismarck
 ND all publish the same shape of record (a permit number, a scope-of-work string
 and two or three milestone dates) behind ArcGIS FeatureServer/MapServer query
-endpoints. Rather than four near-identical modules, each is expressed as a
-:class:`PermitLayer` spec and shares one canonicaliser.
+endpoints. Rather than one near-identical module per register, each is
+expressed as a :class:`PermitLayer` spec and shares one canonicaliser.
 
 Each spec was verified by fetching the layer's own ``?f=json`` field list before
 being written down; the field names below are the layer's real field names.
@@ -21,11 +21,10 @@ import pandas as pd
 from msa.config import CANONICAL_COLUMNS, RAW_DIR
 from msa.ingest import arcgis
 from msa.ingest.text import (
-    NON_PV_RE,
-    PV_RE,
     extract_kw,
     has_battery,
     is_ground_mount,
+    is_pv,
     normalize_contractor,
 )
 
@@ -274,7 +273,7 @@ def to_canonical(spec: PermitLayer, raw: pd.DataFrame) -> pd.DataFrame:
     work = _col(df, spec.work_class_field, "").astype("string").fillna("")
     blob = (desc + " " + work).str.upper()
 
-    keep = blob.str.contains(PV_RE) & ~blob.str.contains(NON_PV_RE)
+    keep = is_pv(blob)
     LOG.info("%s: %d/%d rows kept as PV", spec.jurisdiction, int(keep.sum()), len(df))
     df = df.loc[keep].copy()
     df = df.drop_duplicates(subset=[spec.id_field], keep="first")

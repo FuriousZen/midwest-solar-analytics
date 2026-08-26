@@ -34,8 +34,8 @@ MAX_START_DATE_YEARS_AHEAD = 10
 
 #: Largest batch accepted in one call.
 MAX_BATCH_ITEMS = 1000
-#: ``?explain=true`` is only honoured up to this batch size; see
-#: ``msa.serve.app.MAX_EXPLAIN_BATCH``.
+#: ``?explain=true`` is only accepted up to this batch size (422 above it);
+#: see ``msa.serve.app.MAX_EXPLAIN_BATCH``.
 MAX_EXPLAIN_BATCH_ITEMS = 50
 
 
@@ -153,9 +153,10 @@ class BatchRequest(BaseModel):
         min_length=1,
         max_length=MAX_BATCH_ITEMS,
         description=(
-            f"Up to {MAX_BATCH_ITEMS} projects. `?explain=true` is only honoured "
-            f"for batches of {MAX_EXPLAIN_BATCH_ITEMS} or fewer; TreeSHAP over "
-            "a large batch costs far more than the prediction itself."
+            f"Up to {MAX_BATCH_ITEMS} projects. `?explain=true` is only accepted "
+            f"for batches of {MAX_EXPLAIN_BATCH_ITEMS} or fewer and answers 422 "
+            "above that; TreeSHAP over a large batch costs far more than the "
+            "prediction itself."
         ),
     )
 
@@ -172,7 +173,11 @@ class PredictionResponse(BaseModel):
         default=None, description="Lower end of the 80% prediction interval."
     )
     p90_days: float | None = Field(
-        default=None, description="Upper end of the 80% prediction interval."
+        default=None,
+        description=(
+            "Upper end of the 80% prediction interval. The interval always "
+            "contains predicted_days."
+        ),
     )
     predicted_completion_date: date
     horizon_days: int = Field(

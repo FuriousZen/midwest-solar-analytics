@@ -52,12 +52,13 @@ CATEGORICAL_FEATURES: tuple[str, ...] = (
     "timeline_segment",
 )
 
-# NOTE: absolute time indices (``start_year``, days-since-series-start) are
-# deliberately EXCLUDED. They let the booster memorise the level of each
-# historical period, which inflates random-fold CV but collapses on a
-# chronological holdout because the value is out of range for future permits.
-# `python -m scripts.ablate_time_features` quantifies this on the current corpus
-# and writes reports/ablation_time_features.json; run it before quoting a figure.
+# Absolute time indices (``start_year``, days since the series began) are
+# deliberately left out. A deployed model scores permits dated after its
+# training window, where such an index takes a value the booster never saw and
+# has no defined behaviour on. Calendar features (month, weekday, week of year)
+# carry the seasonality without that problem. ``scripts/ablate_time_features``
+# fits the model both ways and writes the comparison to
+# reports/ablation_time_features.json so the trade-off can be inspected.
 NUMERIC_FEATURES: tuple[str, ...] = (
     "system_size_kw",
     "log_system_size_kw",
@@ -120,8 +121,8 @@ def back_transform(pred, log_target: bool, horizon: float):
 
     * A booster fitted on ``log1p(days)`` can emit a score large enough that
       ``expm1`` overflows to ``+inf``. Clamping in *log space first* makes the
-      back-transform total. (An uncaught ``inf`` aborted trial 185 of a 200-trial
-      study; ``tests/test_features.py::test_back_transform_never_returns_infinity``
+      back-transform total. (An uncaught ``inf`` once aborted an Optuna trial;
+      ``tests/test_features.py::test_back_transform_never_returns_infinity``
       pins the fix.)
     * ``NaN`` must never reach the API response: bare ``NaN`` is not valid JSON
       and strict clients reject the whole payload.
@@ -135,6 +136,22 @@ def back_transform(pred, log_target: bool, horizon: float):
         pred = np.expm1(np.clip(pred, 0.0, np.log1p(horizon)))
     pred = np.clip(pred, 0.0, horizon)
     return np.nan_to_num(pred, nan=0.0, posinf=horizon, neginf=0.0)
+
+
+def contain_point(
+    lo: np.ndarray, hi: np.ndarray, point: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
+    """Widen ``[lo, hi]`` so it contains ``point``.
+
+    The point estimate and the interval come from different boosters, so
+    nothing else guarantees the point lies inside. The interval is widened
+    rather than the point moved: widening can only raise coverage, so the
+    conformal guarantee on the interval survives, whereas clamping the point
+    would change the number the holdout metrics score. Shared by evaluation
+    (``msa.train.final``) and serving (``msa.serve.app``) so the published
+    interval is the one that was evaluated.
+    """
+    return np.minimum(lo, point), np.maximum(hi, point)
 
 
 # ---------------------------------------------------------------------------

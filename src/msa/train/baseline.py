@@ -9,8 +9,12 @@ Optuna study so the comparison is apples-to-apples:
 ``ridge``              Ridge regression on median-imputed numerics + one-hot
                        categoricals.
 ``xgb_default``        ``XGBRegressor()`` with stock library hyper-parameters.
-                       This is the baseline for the "improvement from
-                       hyper-parameter search" figure.
+                       This is the baseline the hyper-parameter search is
+                       compared against.
+
+Every baseline's predictions go through the same ``back_transform`` clamp as
+the tuned model's, so a comparison between them is between two things a
+caller could actually be served, not between a clamped output and a raw one.
 
 Run::
 
@@ -34,8 +38,15 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from xgboost import XGBRegressor
 
-from msa.config import DEFAULT_SEGMENT, RANDOM_SEED, REPORTS_DIR, SEGMENTS
-from msa.features.build import CATEGORICAL_FEATURES, NUMERIC_FEATURES
+from msa.config import (
+    DEFAULT_SEGMENT,
+    RANDOM_SEED,
+    REPORTS_DIR,
+    SEGMENTS,
+    ensure_dirs,
+    max_timeline_days,
+)
+from msa.features.build import CATEGORICAL_FEATURES, NUMERIC_FEATURES, back_transform
 from msa.train.data import Dataset, load_dataset
 from msa.train.metrics import regression_metrics
 from msa.train.tracking import init_mlflow
@@ -145,6 +156,7 @@ def default_xgb(**overrides) -> XGBRegressor:
 def evaluate_baselines(ds: Dataset, log_to_mlflow: bool = True) -> dict:
     cv = make_cv()
     X, y = ds.X_train, ds.y_train
+    horizon = float(max_timeline_days(ds.segment))
 
     specs = {
         "global_median": lambda: _oof_global_median(X, y, cv),
@@ -156,7 +168,7 @@ def evaluate_baselines(ds: Dataset, log_to_mlflow: bool = True) -> dict:
     results: dict[str, dict] = {}
     for name, fn in specs.items():
         LOG.info("baseline: %s", name)
-        oof = fn()
+        oof = back_transform(fn(), False, horizon)
         cv_metrics = regression_metrics(y, oof, prefix="cv_")
 
         # refit on the whole training window and score the chronological holdout
@@ -185,6 +197,7 @@ def evaluate_baselines(ds: Dataset, log_to_mlflow: bool = True) -> dict:
             m.fit(X, y)
             test_pred = m.predict(ds.X_test)
 
+        test_pred = back_transform(test_pred, False, horizon)
         test_metrics = regression_metrics(ds.y_test, test_pred, prefix="test_")
         results[name] = {**cv_metrics, **test_metrics}
         LOG.info(
@@ -226,6 +239,7 @@ def main() -> None:
     ap.add_argument("--no-mlflow", action="store_true")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    ensure_dirs()
 
     if not args.no_mlflow:
         init_mlflow()

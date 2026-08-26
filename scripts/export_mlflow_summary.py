@@ -19,7 +19,7 @@ import logging
 import mlflow
 import pandas as pd
 
-from msa.config import MLFLOW_EXPERIMENT, REPORTS_DIR
+from msa.config import MLFLOW_EXPERIMENT, REPORTS_DIR, ensure_dirs
 from msa.train.tracking import init_mlflow
 
 LOG = logging.getLogger(__name__)
@@ -29,6 +29,7 @@ JSON_PATH = REPORTS_DIR / "mlflow_runs_summary.json"
 
 
 def export() -> dict:
+    ensure_dirs()
     init_mlflow()
     runs = mlflow.search_runs(
         experiment_names=[MLFLOW_EXPERIMENT],

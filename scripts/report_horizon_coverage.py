@@ -1,7 +1,8 @@
 """Report what fraction of each segment's durations falls inside its horizon.
 
-The numbers printed here are the ones quoted in ``msa.config`` next to
-``MAX_TIMELINE_DAYS_BY_SEGMENT``.
+The horizons themselves are set in ``msa.config`` as
+``MAX_TIMELINE_DAYS_BY_SEGMENT``; this writes what they cover on the assembled
+corpus to ``reports/horizon_coverage.json``.
 
 Run::
 
@@ -13,12 +14,13 @@ from __future__ import annotations
 import json
 import logging
 
-from msa.config import REPORTS_DIR, SEGMENTS, max_timeline_days
+from msa.config import REPORTS_DIR, SEGMENTS, ensure_dirs, max_timeline_days
 from msa.train.data import load_raw
 
 
 def main() -> None:
     logging.basicConfig(level=logging.WARNING)
+    ensure_dirs()
     raw = load_raw()
     out = {}
     for seg, (a, b) in SEGMENTS.items():

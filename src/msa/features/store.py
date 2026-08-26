@@ -9,7 +9,8 @@ would mean shipping the whole corpus into the service.
 Instead ``build_store`` snapshots the last observed value of each context
 feature per key at the end of training, and ``apply_store`` joins those values
 onto an incoming request. The service is then a pure function of
-(request, snapshot), which is what makes a sub-50 ms budget achievable.
+(request, snapshot), which is what keeps a request free of disk and network
+access.
 
 Staleness is explicit: the snapshot is dated, and ``/health`` reports that date.
 Refreshing means re-running the pipeline.
@@ -58,8 +59,16 @@ def _last_by(
     frame["_k"] = keys.to_numpy()
     frame["_o"] = order.to_numpy()
     frame = frame.dropna(subset=["_k"])
-    frame = frame.sort_values("_o").groupby("_k", sort=False).last()
-    frame = frame.drop(columns=["_o"], errors="ignore")
+    # ``tail(1)`` keeps the last *row* per key. ``GroupBy.last()`` would take
+    # the last non-null value of each column separately, stitching together a
+    # snapshot that never existed on any single date.
+    frame = (
+        frame.sort_values("_o", kind="stable")
+        .groupby("_k", sort=False)
+        .tail(1)
+        .set_index("_k")
+        .drop(columns=["_o"])
+    )
     return {
         str(k): {c: (None if pd.isna(v) else float(v)) for c, v in row.items()}
         for k, row in frame.iterrows()
@@ -155,7 +164,8 @@ def apply_store(rows: pd.DataFrame, store: dict) -> pd.DataFrame:
     juris_source = store.get("jurisdiction_source", {})
     if juris_source:
         out["source"] = [
-            juris_source.get(str(j)) for j in out.get("jurisdiction", pd.Series(dtype=str))
+            juris_source.get(str(j))
+            for j in out.get("jurisdiction", pd.Series([None] * len(out)))
         ]
 
     known = set(store.get("contractor", {}))

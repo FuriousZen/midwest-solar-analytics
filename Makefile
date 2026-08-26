@@ -1,10 +1,10 @@
-# Reproducible entrypoints. Every number in README.md comes from one of these.
+# Reproducible entrypoints for every stage of the pipeline.
 PY ?= .venv/bin/python
 TRIALS ?= 200
 SEGMENT ?= permit_to_completion
 
 .PHONY: help venv dev data baselines tune final explain serve bench test lint \
-        audit smoke ablate results mlflow-summary pipeline mlflow-ui clean
+        audit smoke ablate mlflow-summary pipeline mlflow-ui clean
 
 help:
 	@grep -E '^[a-z-]+:.*?##' $(MAKEFILE_LIST) | sed 's/:.*##/\t/' | column -t -s "$$(printf '\t')"
@@ -52,14 +52,11 @@ audit: ## known CVEs in the pinned environment (see docs/SECURITY.md)
 smoke: ## whole pipeline end to end, offline, in a temp dir (~3 min)
 	$(PY) -m scripts.smoke_pipeline --trials 3
 
-ablate: ## measure what absolute time indices cost on the chronological holdout
+ablate: ## compare the model with and without absolute time indices
 	$(PY) -m scripts.ablate_time_features
 
-mlflow-summary: ## export the committable MLflow run summary
+mlflow-summary: ## export the MLflow run summary to reports/
 	$(PY) -m scripts.export_mlflow_summary
-
-results: ## regenerate docs/RESULTS.md from the measured artifacts
-	$(PY) -m scripts.make_results_tables
 
 pipeline: ## everything, both segments, end to end
 	./scripts/run_pipeline.sh

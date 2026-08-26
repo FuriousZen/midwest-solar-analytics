@@ -46,7 +46,7 @@ class Recorder:
         self.responses = list(responses)
         self.calls: list[dict] = []
 
-    def __call__(self, url, params=None, headers=None, timeout=None):
+    def __call__(self, url, params=None, headers=None, timeout=None, stream=False):
         self.calls.append({"url": url, "params": params, "timeout": timeout})
         item = self.responses[min(len(self.calls) - 1, len(self.responses) - 1)]
         if isinstance(item, Exception):
@@ -150,16 +150,29 @@ def test_backoff_grows_and_is_jittered(monkeypatch, no_sleep):
 # ---------------------------------------------------------------------------
 
 
-def test_socrata_empty_response_is_an_empty_frame_not_an_error(monkeypatch, tmp_path):
+def test_socrata_empty_response_is_an_error_and_is_not_cached(monkeypatch, tmp_path):
+    """Zero rows means the query is broken; caching it would make that permanent."""
     monkeypatch.setattr(requests, "get", Recorder([FakeResponse(200, "")]))
-    df = socrata.fetch_csv("d.test", "abcd-1234", order="id", cache_path=tmp_path / "c.csv")
-    assert df.empty
+    cache = tmp_path / "c.csv"
+    with pytest.raises(SourceUnavailable, match="no rows"):
+        socrata.fetch_csv("d.test", "abcd-1234", order="id", cache_path=cache)
+    assert not cache.exists()
 
 
-def test_socrata_header_only_response_is_an_empty_frame(monkeypatch, tmp_path):
+def test_socrata_header_only_response_is_an_error_and_is_not_cached(monkeypatch, tmp_path):
     monkeypatch.setattr(requests, "get", Recorder([FakeResponse(200, "a,b\n")]))
-    df = socrata.fetch_csv("d.test", "abcd-1234", order="id", cache_path=tmp_path / "c.csv")
-    assert df.empty
+    cache = tmp_path / "c.csv"
+    with pytest.raises(SourceUnavailable, match="no rows"):
+        socrata.fetch_csv("d.test", "abcd-1234", order="id", cache_path=cache)
+    assert not cache.exists()
+
+
+def test_socrata_stops_paging_when_the_portal_ignores_the_offset(monkeypatch):
+    full = "id\n" + "\n".join(str(i) for i in range(socrata.PAGE_SIZE)) + "\n"
+    monkeypatch.setattr(requests, "get", Recorder([FakeResponse(200, full)] * 4))
+    monkeypatch.setattr(socrata, "MAX_PAGES", 3)
+    with pytest.raises(SourceUnavailable, match="offset"):
+        socrata.fetch_csv("d.test", "abcd-1234", order="id")
 
 
 def test_socrata_html_error_page_is_reported_as_source_unavailable(monkeypatch):
@@ -223,10 +236,12 @@ def test_arcgis_non_json_body_is_reported_clearly(monkeypatch, no_sleep):
         arcgis.describe("https://svc.test/FeatureServer/0")
 
 
-def test_arcgis_empty_layer_yields_an_empty_frame(monkeypatch):
+def test_arcgis_empty_layer_is_an_error_and_is_not_cached(monkeypatch, tmp_path):
     monkeypatch.setattr(requests, "get", Recorder([FakeResponse(200, payload={"features": []})]))
-    df = arcgis.query("https://svc.test/FeatureServer/0", order_by="OBJECTID")
-    assert df.empty
+    cache = tmp_path / "layer.csv"
+    with pytest.raises(SourceUnavailable, match="no features"):
+        arcgis.query("https://svc.test/FeatureServer/0", order_by="OBJECTID", cache_path=cache)
+    assert not cache.exists()
 
 
 def test_arcgis_features_without_attributes_do_not_crash(monkeypatch):

@@ -28,9 +28,9 @@ import logging
 from pathlib import Path
 
 import pandas as pd
-import requests
 
 from msa.config import RAW_DIR
+from msa.ingest.http import request_with_retries
 
 LOG = logging.getLogger(__name__)
 
@@ -66,21 +66,36 @@ USE_COLS = [
 
 
 def _list_state_keys(edition: str) -> dict[str, str]:
-    """Map two-letter state -> S3 object key for one TTS edition."""
+    """Map two-letter state -> S3 object key for one TTS edition.
+
+    Follows S3's ``IsTruncated`` / ``NextContinuationToken`` pagination, so a
+    listing longer than one page is read in full rather than silently cut off.
+    """
     import xml.etree.ElementTree as ET
 
-    url = f"{BUCKET_URL}/?list-type=2&prefix={PREFIX}/{edition}/&max-keys=1000"
-    resp = requests.get(url, timeout=120)
-    resp.raise_for_status()
     ns = {"s3": "http://s3.amazonaws.com/doc/2006-03-01/"}
-    root = ET.fromstring(resp.text)
+    params: dict[str, str] = {
+        "list-type": "2",
+        "prefix": f"{PREFIX}/{edition}/",
+        "max-keys": "1000",
+    }
     out: dict[str, str] = {}
-    for c in root.findall("s3:Contents", ns):
-        key = c.findtext("s3:Key", default="", namespaces=ns)
-        if "state=" in key and key.endswith(".parquet"):
-            state = key.split("state=")[1].split("/")[0]
-            out[state] = key
-    return out
+    while True:
+        resp = request_with_retries(
+            f"{BUCKET_URL}/", params, timeout=120, source="tts:list"
+        )
+        root = ET.fromstring(resp.text)
+        for c in root.findall("s3:Contents", ns):
+            key = c.findtext("s3:Key", default="", namespaces=ns)
+            if "state=" in key and key.endswith(".parquet"):
+                state = key.split("state=")[1].split("/")[0]
+                out[state] = key
+        if root.findtext("s3:IsTruncated", default="false", namespaces=ns) != "true":
+            return out
+        token = root.findtext("s3:NextContinuationToken", default="", namespaces=ns)
+        if not token:
+            return out
+        params["continuation-token"] = token
 
 
 def download(
@@ -95,6 +110,7 @@ def download(
             f"TTS edition {edition} does not publish these states: {missing}. "
             f"Available: {sorted(keys)}"
         )
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
     paths: dict[str, Path] = {}
     for state in states:
         dest = RAW_DIR / f"tts_{edition}_{state}.parquet"
@@ -103,11 +119,15 @@ def download(
         else:
             url = f"{BUCKET_URL}/{keys[state]}"
             LOG.info("Downloading %s -> %s", url, dest)
-            with requests.get(url, stream=True, timeout=600) as r:
-                r.raise_for_status()
-                with open(dest, "wb") as fh:
-                    for chunk in r.iter_content(chunk_size=1 << 20):
-                        fh.write(chunk)
+            # Stream into a temp file and rename on completion, so a download
+            # interrupted half-way is never mistaken for a cached parquet.
+            tmp = dest.with_suffix(".parquet.part")
+            with request_with_retries(
+                url, timeout=600, source=f"tts:{state}", stream=True
+            ) as r, open(tmp, "wb") as fh:
+                for chunk in r.iter_content(chunk_size=1 << 20):
+                    fh.write(chunk)
+            tmp.replace(dest)
         paths[state] = dest
     return paths
 

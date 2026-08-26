@@ -28,11 +28,10 @@ import pandas as pd
 from msa.config import CANONICAL_COLUMNS, RAW_DIR
 from msa.ingest import arcgis
 from msa.ingest.text import (
-    NON_PV_RE,
-    PV_RE,
     extract_kw,
     has_battery,
     is_ground_mount,
+    is_pv,
     normalize_contractor,
 )
 
@@ -89,7 +88,7 @@ def to_canonical(raw: pd.DataFrame) -> pd.DataFrame:
     df["comments"] = df["comments"].astype("string")
     text = df["comments"].fillna("").str.upper()
 
-    keep = text.str.contains(PV_RE) & ~text.str.contains(NON_PV_RE)
+    keep = is_pv(text)
     LOG.info("Minneapolis: %d/%d rows match PV keywords", int(keep.sum()), len(df))
     df = df.loc[keep].copy()
 

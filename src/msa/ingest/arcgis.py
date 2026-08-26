@@ -89,14 +89,6 @@ def describe(layer_url: str) -> dict:
     return _get_json(layer_url, {"f": "json"})
 
 
-def count(layer_url: str, where: str = "1=1") -> int:
-    payload = _get_json(
-        f"{layer_url}/query",
-        {"where": where, "returnCountOnly": "true", "f": "json"},
-    )
-    return int(payload.get("count", 0))
-
-
 def query(
     layer_url: str,
     *,
@@ -110,6 +102,11 @@ def query(
     """Page through a layer and return the attribute table as a DataFrame.
 
     ``order_by`` is mandatory so that offset paging is deterministic.
+
+    A layer that answers with no features raises :class:`SourceUnavailable`
+    and is never cached: every layer this project queries has matching rows,
+    so an empty answer means the query or the layer is broken, and caching it
+    would make the failure permanent.
     """
     if cache_path is not None and cache_path.exists() and not refresh:
         LOG.info("Using cached %s", cache_path)
@@ -151,6 +148,12 @@ def query(
             source=f"arcgis:{layer_url}",
         )
 
+    if not rows:
+        raise SourceUnavailable(
+            f"arcgis:{layer_url} returned no features for this query; nothing "
+            f"was cached",
+            source=f"arcgis:{layer_url}",
+        )
     df = pd.DataFrame(rows)
     for c in date_fields:
         if c in df.columns:

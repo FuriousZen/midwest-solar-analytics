@@ -49,7 +49,7 @@ from datetime import date
 
 import numpy as np
 
-from msa.config import DEFAULT_SEGMENT, REPORTS_DIR, SEGMENTS
+from msa.config import DEFAULT_SEGMENT, REPORTS_DIR, SEGMENTS, ensure_dirs
 
 LOG = logging.getLogger(__name__)
 
@@ -178,9 +178,10 @@ async def _bench_inprocess_async(
                 stats["throughput_rps"],
             )
 
+        # full batches only, so the per-item figure divides by a real size
         batches = [
             payloads[i : i + batch_size]
-            for i in range(0, len(payloads) - batch_size, batch_size)
+            for i in range(0, len(payloads) - batch_size + 1, batch_size)
         ] or [payloads[:batch_size]]
         await client.post("/predict/batch", json={"items": batches[0]})
         batch_samples: list[float] = []
@@ -285,6 +286,7 @@ def main() -> None:
     ap.add_argument("--batch-size", type=int, default=100)
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    ensure_dirs()
 
     payloads = sample_payloads(args.segment, args.requests)
     levels = tuple(sorted(set(args.concurrency)))

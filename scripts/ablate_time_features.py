@@ -1,10 +1,10 @@
-"""Measure what absolute time indices do to generalisation.
+"""Compare the model with and without absolute time indices.
 
 `msa.features.build` deliberately omits `start_year` and
-`days_since_series_start`. This script produces the evidence for that decision
-by fitting the same model with and without them and comparing random-fold CV
-against the chronological holdout. Writes
-``reports/ablation_time_features.json``.
+`days_since_series_start`. This script fits the same stock model with and
+without them, scores both under random-fold CV and on the chronological
+holdout, and writes ``reports/ablation_time_features.json`` so the cost of
+that choice on the current corpus can be inspected.
 
 Run::
 
@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 from xgboost import XGBRegressor
 
-from msa.config import RANDOM_SEED, REPORTS_DIR
+from msa.config import RANDOM_SEED, REPORTS_DIR, ensure_dirs
 from msa.train.baseline import make_cv
 from msa.train.data import load_dataset
 from msa.train.metrics import regression_metrics
@@ -59,6 +59,7 @@ def evaluate(X_tr, y_tr, X_te, y_te) -> dict:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    ensure_dirs()
     results = {}
     for segment in ("application_to_issue", "permit_to_completion"):
         ds = load_dataset(segment=segment)

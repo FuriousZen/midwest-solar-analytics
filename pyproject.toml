@@ -46,6 +46,3 @@ ignore = [
 "tests/*" = ["B011", "SLF001"]
 # The SHAP report must set the matplotlib backend before importing pyplot.
 "src/msa/explain/shap_report.py" = ["E402"]
-# The generated tables use U+2212 MINUS deliberately: "(end − start).days" is
-# mathematical notation in prose, not an operator in code.
-"scripts/make_results_tables.py" = ["RUF001"]

@@ -15,7 +15,7 @@ from collections.abc import Callable
 
 import pandas as pd
 
-from msa.config import CANONICAL_COLUMNS, PROCESSED_DIR, SEGMENTS
+from msa.config import CANONICAL_COLUMNS, PROCESSED_DIR, SEGMENTS, ensure_dirs
 
 LOG = logging.getLogger(__name__)
 
@@ -196,6 +196,7 @@ def main() -> None:
     args = ap.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    ensure_dirs()
     only = tuple(args.only) if args.only else None
     df = build(refresh=args.refresh, only=only, strict=args.strict)
 
@@ -213,14 +214,16 @@ def main() -> None:
         )
         return
 
-    # Write both artifacts atomically: a half-written parquet is exactly the
-    # input that makes every downstream stage fail in a confusing way.
-    tmp_parquet = OUT_PARQUET.with_suffix(".parquet.tmp")
-    df.to_parquet(tmp_parquet, index=False)
-    tmp_parquet.replace(OUT_PARQUET)
+    # Both artifacts are fully written to temp files before either is moved
+    # into place, so a crash leaves the previous parquet and summary as a
+    # matching pair; a half-written parquet is exactly the input that makes
+    # every downstream stage fail in a confusing way.
     summary = summarise(df)
+    tmp_parquet = OUT_PARQUET.with_suffix(".parquet.tmp")
     tmp_summary = OUT_SUMMARY.with_suffix(".json.tmp")
+    df.to_parquet(tmp_parquet, index=False)
     tmp_summary.write_text(json.dumps(summary, indent=2))
+    tmp_parquet.replace(OUT_PARQUET)
     tmp_summary.replace(OUT_SUMMARY)
     print(json.dumps(summary, indent=2))
     print(f"\nwrote {len(df):,} rows -> {OUT_PARQUET}")

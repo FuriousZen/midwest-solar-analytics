@@ -25,7 +25,13 @@ import pandas as pd
 
 from msa.config import CANONICAL_COLUMNS, RAW_DIR
 from msa.ingest import socrata
-from msa.ingest.text import NON_PV_RE, PV_RE, normalize_contractor
+from msa.ingest.text import (
+    NON_PV_RE,
+    PV_RE,
+    has_battery,
+    is_ground_mount,
+    normalize_contractor,
+)
 
 LOG = logging.getLogger(__name__)
 
@@ -77,9 +83,6 @@ _RE_ARRAY_KW = re.compile(r"ARRAY OUTPUT:\s*([\d.]+)\s*KW")
 _RE_INVERTER_KW = re.compile(r"INVERTER OUTPUT:\s*([\d.]+)\s*KW")
 _RE_ANY_KW = re.compile(r"([\d.]+)\s*KW")
 _RE_ROOF_TYPE = re.compile(r"ROOF TYPE:\s*([A-Z\-]+)")
-_RE_BATTERY = re.compile(r"BATTER|ENERGY STORAGE|\bESS\b")
-_RE_GROUND = re.compile(r"GROUND[- ]MOUNT|GROUND MOUNTED")
-
 
 
 def _parse_float(series: pd.Series, pattern: re.Pattern[str]) -> pd.Series:
@@ -171,7 +174,7 @@ def to_canonical(raw: pd.DataFrame) -> pd.DataFrame:
     roof_type[roof.eq("SLOPED")] = "pitched"
     roof_type[roof.eq("STEEP")] = "steep"
 
-    mount = np.where(desc.str.contains(_RE_GROUND), "ground", "roof")
+    mount = np.where(is_ground_mount(desc), "ground", "roof")
 
     gc = _first_contact_of(
         df, ("GENERAL CONTRACTOR", "CONTRACTOR-GENERAL CONTRACTOR")
@@ -211,7 +214,7 @@ def to_canonical(raw: pd.DataFrame) -> pd.DataFrame:
             "longitude": pd.to_numeric(df["longitude"], errors="coerce"),
             "mount_type": mount,
             "roof_type": roof_type,
-            "battery": desc.str.contains(_RE_BATTERY).astype(int),
+            "battery": has_battery(desc).astype(int),
             "permit_class": df["permit_type"].astype("string").str.strip(),
             "district": "ward-" + df["ward"].astype("string").str.replace(
                 r"\.0$", "", regex=True
@@ -243,4 +246,4 @@ if __name__ == "__main__":  # pragma: no cover
     frame = load()
     print(frame.shape)
     print(frame.head())
-    print(frame["timeline_days"].describe())
+    print((frame["issue_date"] - frame["application_date"]).dt.days.describe())

@@ -35,6 +35,7 @@ from msa.config import (
     RANDOM_SEED,
     REPORTS_DIR,
     SEGMENTS,
+    ensure_dirs,
     max_timeline_days,
 )
 from msa.features.build import (
@@ -42,6 +43,7 @@ from msa.features.build import (
     FEATURES,
     NUMERIC_FEATURES,
     back_transform,
+    contain_point,
 )
 from msa.features.store import build_store, save_store
 from msa.train.baseline import N_SPLITS, _oof_sklearn, default_xgb, make_cv
@@ -88,6 +90,11 @@ def load_best_params(segment: str) -> tuple[dict, bool, int | None]:
 
 #: Interval endpoints published alongside the point prediction.
 QUANTILES = (0.1, 0.5, 0.9)
+
+
+def registered_model_name(segment: str) -> str:
+    """Name under which the segment's model is registered in MLflow."""
+    return f"solar-timeline-{segment}"
 
 
 def fit_final(ds: Dataset, params: dict, log_target: bool):
@@ -155,10 +162,11 @@ def calibrate_conformal(
 ) -> float:
     """Split-conformal (CQR) widening for the quantile interval.
 
-    Pinball-loss quantiles are not calibrated out of the box; on this data the
-    nominal 80% interval empirically covered ~64% of the holdout. Conformalised
-    Quantile Regression (Romano, Patterson & Candes, 2019) fixes that with a
-    single additive correction estimated on held-out-from-fit data:
+    Pinball-loss quantiles are not calibrated out of the box: the nominal
+    interval can cover noticeably less of a holdout than it claims.
+    Conformalised Quantile Regression (Romano, Patterson & Candes, 2019) fixes
+    that with a single additive correction estimated on held-out-from-fit
+    data:
 
         s_i = max(lo_i - y_i,  y_i - hi_i)         # conformity score
         delta = the ceil((n+1)(1-alpha))/n empirical quantile of s
@@ -253,7 +261,11 @@ def run(segment: str, log_to_mlflow: bool = True) -> dict:
     tuned_cv, _tuned_folds, tuned_oof = cv_evaluate(
         params, ds.X_train, ds.y_train, cv, log_target, horizon
     )
-    base_oof = _oof_sklearn(default_xgb, ds.X_train, ds.y_train, make_cv())
+    # the stock baseline goes through the same clamp as the tuned OOF
+    # predictions, so the improvement figure compares like with like
+    base_oof = back_transform(
+        _oof_sklearn(default_xgb, ds.X_train, ds.y_train, make_cv()), False, horizon
+    )
     base_cv = regression_metrics(ds.y_train, base_oof, prefix="cv_")
 
     model = fit_final(ds, params, log_target)
@@ -269,6 +281,7 @@ def run(segment: str, log_to_mlflow: bool = True) -> dict:
     # unclipped one that only exists during evaluation.
     lo = np.clip(raw_lo - conformal_delta, 0.0, horizon)
     hi = np.clip(raw_hi + conformal_delta, 0.0, horizon)
+    lo, hi = contain_point(lo, hi, test_pred)
     y_true = ds.y_test.to_numpy()
     covered = (y_true >= lo) & (y_true <= hi)
     interval = {
@@ -427,10 +440,12 @@ def run(segment: str, log_to_mlflow: bool = True) -> dict:
             # Log a *servable* model, not just a stored one. See
             # msa.train.mlflow_model for why the raw xgboost flavour cannot be
             # served: JSON has no categorical dtype, so the booster rejects the
-            # frame MLflow hands it back.
+            # frame MLflow hands it back. Registering it gives each segment a
+            # named, versioned entry in the model registry.
             example = json_safe_example(ds.X_test.head(3))
             mlflow.pyfunc.log_model(
                 name=f"model-{segment}",
+                registered_model_name=registered_model_name(segment),
                 python_model=TimelineModel(),
                 artifacts={
                     BOOSTER_ARTIFACT: str(md / "model.json"),
@@ -469,6 +484,7 @@ def main() -> None:
     ap.add_argument("--no-mlflow", action="store_true")
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    ensure_dirs()
     if not args.no_mlflow:
         init_mlflow()
     metrics = run(args.segment, log_to_mlflow=not args.no_mlflow)

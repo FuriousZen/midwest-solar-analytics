@@ -35,7 +35,7 @@ import pandas as pd
 import shap
 import xgboost as xgb
 
-from msa.config import DEFAULT_SEGMENT, MODELS_DIR, REPORTS_DIR, SEGMENTS
+from msa.config import DEFAULT_SEGMENT, MODELS_DIR, REPORTS_DIR, SEGMENTS, ensure_dirs
 from msa.train.data import load_dataset
 
 LOG = logging.getLogger(__name__)
@@ -309,6 +309,7 @@ def main() -> None:
     ap.add_argument("--max-rows", type=int, default=MAX_EXPLAIN_ROWS)
     args = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    ensure_dirs()
     print(build(args.segment, args.max_rows))
 
 

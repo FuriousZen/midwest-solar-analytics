@@ -72,7 +72,7 @@ jobs:
           pip install --no-deps -e .
       - name: end-to-end pipeline on a synthetic corpus
         run: python -m scripts.smoke_pipeline --trials 3 --rows 4000
-      - name: the committed results must not have been rewritten by the smoke run
+      - name: the smoke run must not have touched anything committed
         run: git diff --exit-code -- docs README.md reports data
 
   audit:

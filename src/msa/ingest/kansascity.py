@@ -29,11 +29,10 @@ import pandas as pd
 from msa.config import CANONICAL_COLUMNS, RAW_DIR
 from msa.ingest import socrata
 from msa.ingest.text import (
-    NON_PV_RE,
-    PV_RE,
     extract_kw,
     has_battery,
     is_ground_mount,
+    is_pv,
     normalize_contractor,
 )
 
@@ -114,7 +113,7 @@ def _cpd_to_canonical(raw: pd.DataFrame) -> pd.DataFrame:
     df = raw.copy()
     df["description"] = df["description"].astype("string")
     text = df["description"].fillna("").str.upper()
-    keep = text.str.contains(PV_RE) & ~text.str.contains(NON_PV_RE)
+    keep = is_pv(text)
     LOG.info("KCMO CPD: %d/%d rows kept as PV", int(keep.sum()), len(df))
     df = df.loc[keep].drop_duplicates(subset=["permitnum"], keep="first").copy()
     text = df["description"].fillna("").str.upper()
@@ -167,7 +166,7 @@ def _city_to_canonical(raw: pd.DataFrame) -> pd.DataFrame:
     df = raw.copy()
     df["project"] = df["project"].astype("string")
     text = df["project"].fillna("").str.upper()
-    keep = text.str.contains(PV_RE) & ~text.str.contains(NON_PV_RE)
+    keep = is_pv(text)
     LOG.info("KCMO City: %d/%d rows kept as PV", int(keep.sum()), len(df))
     df = df.loc[keep].drop_duplicates(subset=["permit_number"], keep="first").copy()
     text = df["project"].fillna("").str.upper()
@@ -218,7 +217,6 @@ def load(refresh: bool = False) -> pd.DataFrame:
     city = _city_to_canonical(_fetch_city(refresh))
     # CPD first: it carries contractor names, which the live feed lacks.
     out = pd.concat([cpd, city], ignore_index=True)
-    before = len(out)
     out = out.drop_duplicates(subset=["record_id"], keep="first")
     LOG.info(
         "KCMO: %d + %d rows -> %d after cross-register de-dup",
@@ -226,7 +224,6 @@ def load(refresh: bool = False) -> pd.DataFrame:
         len(city),
         len(out),
     )
-    assert before >= len(out)
     return out.reset_index(drop=True)
 
 

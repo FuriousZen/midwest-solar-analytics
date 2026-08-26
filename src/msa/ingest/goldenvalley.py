@@ -23,11 +23,10 @@ import pandas as pd
 from msa.config import CANONICAL_COLUMNS, RAW_DIR
 from msa.ingest import arcgis
 from msa.ingest.text import (
-    NON_PV_RE,
-    PV_RE,
     extract_kw,
     has_battery,
     is_ground_mount,
+    is_pv,
     normalize_contractor,
 )
 
@@ -89,7 +88,7 @@ def to_canonical(raw: pd.DataFrame) -> pd.DataFrame:
         + df["Work_Type"].astype("string").fillna("")
     ).str.upper()
 
-    keep = blob.str.contains(PV_RE) & ~blob.str.contains(NON_PV_RE)
+    keep = is_pv(blob)
     LOG.info("Golden Valley: %d/%d rows kept as PV", int(keep.sum()), len(df))
     df = df.loc[keep].drop_duplicates(subset=["Permit_Nbr"], keep="first").copy()
 

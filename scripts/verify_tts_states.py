@@ -14,13 +14,14 @@ from __future__ import annotations
 
 import json
 
-from msa.config import MIDWEST_STATES, REPORTS_DIR
+from msa.config import MIDWEST_STATES, REPORTS_DIR, ensure_dirs
 from msa.ingest.tts import _list_state_keys
 
 EDITIONS = ("2018", "2019", "2020", "2021", "2022", "2023", "2024")
 
 
 def main() -> None:
+    ensure_dirs()
     out = {}
     for edition in EDITIONS:
         try:

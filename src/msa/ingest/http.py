@@ -74,17 +74,22 @@ def request_with_retries(
     source: str = "",
     max_attempts: int = MAX_ATTEMPTS,
     sleep=None,
+    stream: bool = False,
 ) -> requests.Response:
     """GET ``url``, retrying only transient failures. Never returns a bad status.
 
     ``sleep`` is resolved at call time, not bound as a default, so a test can
     replace ``time.sleep`` and actually observe the backoff schedule.
+    ``stream=True`` is passed through for large downloads; the caller then
+    owns the response and must close it.
     """
     sleep = sleep or time.sleep
     last: Exception | None = None
     for attempt in range(max_attempts):
         try:
-            resp = requests.get(url, params=params, headers=headers, timeout=timeout)
+            resp = requests.get(
+                url, params=params, headers=headers, timeout=timeout, stream=stream
+            )
         except requests.RequestException as exc:
             # connection reset, DNS failure, read timeout: all transient
             last = exc

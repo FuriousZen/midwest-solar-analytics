@@ -17,16 +17,15 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 DATA_DIR = Path(os.environ.get("MSA_DATA_DIR", REPO_ROOT / "data"))
 RAW_DIR = DATA_DIR / "raw"
-INTERIM_DIR = DATA_DIR / "interim"
 PROCESSED_DIR = DATA_DIR / "processed"
 
 MODELS_DIR = Path(os.environ.get("MSA_MODELS_DIR", REPO_ROOT / "models"))
 REPORTS_DIR = Path(os.environ.get("MSA_REPORTS_DIR", REPO_ROOT / "reports"))
 
 # MLflow tracking store. MLflow 3.x refuses the legacy ./mlruns file store, so
-# we use the SQLite backend it recommends. Both the DB and the artifact root
-# live inside the repo and are gitignored; a summary export is committed
-# instead (see scripts/export_mlflow_summary.py).
+# the SQLite backend it recommends is used instead. Both the DB and the
+# artifact root live inside the repo and are gitignored; a summary export
+# under reports/ is committed instead (see scripts/export_mlflow_summary.py).
 MLFLOW_TRACKING_URI = os.environ.get(
     "MLFLOW_TRACKING_URI", f"sqlite:///{REPO_ROOT / 'mlflow.db'}"
 )
@@ -35,8 +34,17 @@ MLFLOW_ARTIFACT_ROOT = os.environ.get(
 )
 MLFLOW_EXPERIMENT = os.environ.get("MLFLOW_EXPERIMENT", "midwest-solar-timeline")
 
-for _d in (RAW_DIR, INTERIM_DIR, PROCESSED_DIR, MODELS_DIR, REPORTS_DIR):
-    _d.mkdir(parents=True, exist_ok=True)
+
+
+def ensure_dirs() -> None:
+    """Create the data, model and report directories.
+
+    Called by each entry point rather than at import time, so importing the
+    package (from a test, a notebook, or the docs tooling) never writes to
+    the filesystem.
+    """
+    for d in (RAW_DIR, PROCESSED_DIR, MODELS_DIR, REPORTS_DIR):
+        d.mkdir(parents=True, exist_ok=True)
 
 # ---------------------------------------------------------------------------
 # Domain constants
@@ -122,14 +130,10 @@ DEFAULT_SEGMENT = os.environ.get("MSA_SEGMENT", "permit_to_completion")
 #: over-the-counter permits, or an inspection closed the day it was issued).
 #: The upper bound is the horizon the service predicts within; jobs that take
 #: longer are treated as out of scope rather than silently squashed into the
-#: target distribution. Realised coverage differs per segment and is recorded
-#: below; see data/processed/dataset_summary.json and
-#: reports/horizon_coverage.json for the numbers behind it.
+#: target distribution. ``scripts/report_horizon_coverage.py`` writes the share
+#: of each segment's observed durations that falls inside its bound to
+#: reports/horizon_coverage.json.
 MIN_TIMELINE_DAYS = 0
-#: Coverage of the observed duration distribution at each bound, measured on
-#: the assembled corpus (scripts/report_horizon_coverage.py):
-#:   application_to_issue   <=120d covers 98.62% of the 21,884 usable rows
-#:   permit_to_completion   <=365d covers 93.02% of the 12,108 usable rows
 MAX_TIMELINE_DAYS_BY_SEGMENT: dict[str, int] = {
     "application_to_issue": 120,
     "permit_to_completion": 365,

@@ -14,6 +14,7 @@ Two things are checked here that nothing else covers:
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -35,16 +36,40 @@ def test_written_metadata_satisfies_the_serving_contract(model_root):
     assert set(meta["categories"]) >= set(CATEGORICAL_FEATURES)
 
 
-def test_final_stamps_the_schema_version_and_a_content_bound_version():
-    """`build_metadata` must not be able to emit an unstamped artifact."""
-    import inspect
+def test_build_metadata_emits_a_stamped_servable_artifact(synthetic_canonical):
+    """What `final.build_metadata` writes must pass the serving contract as is."""
+    from datetime import datetime
 
+    from msa.artifacts import validate_metadata
+    from msa.features.build import build_features, clean
     from msa.train import final
+    from msa.train.data import Dataset
 
-    source = inspect.getsource(final.build_metadata)
-    assert "artifact_schema_version" in source
-    assert "trained_at" in source
-    assert "build_model_version" in inspect.getsource(final.run)
+    df = clean(synthetic_canonical, segment=SEGMENT, apply_censor_guard=False)
+    X, y = build_features(df)
+    cut = int(len(X) * 0.8)
+    ds = Dataset(
+        X_train=X.iloc[:cut].reset_index(drop=True),
+        y_train=y.iloc[:cut].reset_index(drop=True),
+        X_test=X.iloc[cut:].reset_index(drop=True),
+        y_test=y.iloc[cut:].reset_index(drop=True),
+        meta_train=df.iloc[:cut].reset_index(drop=True),
+        meta_test=df.iloc[cut:].reset_index(drop=True),
+        split_date=df["start_date"].iloc[cut],
+        categories={c: list(map(str, X[c].cat.categories)) for c in CATEGORICAL_FEATURES},
+        segment=SEGMENT,
+    )
+    meta = final.build_metadata(ds, {"max_depth": 3}, False, {"cv_mae": 1.0})
+    assert meta["artifact_schema_version"] == ARTIFACT_SCHEMA_VERSION
+    # a real, timezone-aware timestamp
+    assert datetime.fromisoformat(meta["trained_at"]).tzinfo is not None
+    # loadable by the serving side without any post-processing
+    validate_metadata(
+        meta,
+        expected_features=FEATURES,
+        expected_categoricals=CATEGORICAL_FEATURES,
+        path=Path("metadata.json"),
+    )
 
 
 def test_serving_can_load_what_training_wrote(model_root):
@@ -64,6 +89,7 @@ def logged_pyfunc(model_root, tmp_path):
     """Log the tiny model through the real MLflow path, into a temp store."""
     import mlflow
 
+    from msa.train.final import registered_model_name
     from msa.train.mlflow_model import (
         BOOSTER_ARTIFACT,
         METADATA_ARTIFACT,
@@ -76,6 +102,7 @@ def logged_pyfunc(model_root, tmp_path):
     with mlflow.start_run() as run:
         info = mlflow.pyfunc.log_model(
             name="model",
+            registered_model_name=registered_model_name(SEGMENT),
             python_model=TimelineModel(),
             artifacts={
                 BOOSTER_ARTIFACT: str(d / "model.json"),
@@ -152,6 +179,18 @@ def test_logged_model_agrees_with_the_service(logged_pyfunc, model_root):
     served = back_transform(bundle.model.predict(X), bundle.log_target, bundle.horizon)
     registry = np.asarray(logged_pyfunc.predict(_serving_frame(model_root)), dtype=float)
     np.testing.assert_allclose(registry, served, rtol=1e-6)
+
+
+def test_logged_model_is_registered_under_the_segment_name(logged_pyfunc):
+    """The SQLite backend supports the registry, so `final` registers, not just logs."""
+    import mlflow
+
+    from msa.train.final import registered_model_name
+
+    client = mlflow.tracking.MlflowClient()
+    versions = client.search_model_versions(f"name = '{registered_model_name(SEGMENT)}'")
+    assert len(versions) == 1
+    assert int(versions[0].version) == 1
 
 
 def test_logged_model_rejects_a_frame_missing_columns(logged_pyfunc, model_root):

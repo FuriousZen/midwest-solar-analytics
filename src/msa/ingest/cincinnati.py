@@ -29,11 +29,10 @@ import pandas as pd
 from msa.config import CANONICAL_COLUMNS, RAW_DIR
 from msa.ingest import socrata
 from msa.ingest.text import (
-    NON_PV_RE,
-    PV_RE,
     extract_kw,
     has_battery,
     is_ground_mount,
+    is_pv,
 )
 
 LOG = logging.getLogger(__name__)
@@ -118,7 +117,7 @@ def load(refresh: bool = False) -> pd.DataFrame:
     scope = fetch_scope(refresh=refresh)
     scope["desc_of_work"] = scope["desc_of_work"].astype("string")
     text = scope["desc_of_work"].fillna("").str.upper()
-    keep = text.str.contains(PV_RE) & ~text.str.contains(NON_PV_RE)
+    keep = is_pv(text)
     LOG.info("Cincinnati scope: %d/%d rows kept as PV", int(keep.sum()), len(scope))
     scope = scope.loc[keep].copy()
     scope["number_key"] = scope["number_key"].astype(str)

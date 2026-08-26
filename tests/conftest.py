@@ -2,8 +2,7 @@
 
 Tests never hit the network. Anything that needs canonical records builds them
 from ``synthetic_canonical``, a hand-written frame with known properties, used
-only to exercise transformation logic. It is never used for training or for any
-number that appears in the README.
+only to exercise transformation logic. It is never used for training.
 """
 
 from __future__ import annotations
@@ -15,11 +14,9 @@ import pytest
 from msa.config import CANONICAL_COLUMNS
 
 
-@pytest.fixture
-def synthetic_canonical() -> pd.DataFrame:
+def _canonical_records(n: int, seed: int = 0) -> pd.DataFrame:
     """Deterministic canonical records for unit-testing transformations."""
-    rng = np.random.default_rng(0)
-    n = 400
+    rng = np.random.default_rng(seed)
     start = pd.Timestamp("2021-01-01") + pd.to_timedelta(
         rng.integers(0, 900, n), unit="D"
     )
@@ -61,6 +58,17 @@ def synthetic_canonical() -> pd.DataFrame:
         }
     )
     return df[list(CANONICAL_COLUMNS)]
+
+
+@pytest.fixture
+def synthetic_canonical() -> pd.DataFrame:
+    return _canonical_records(400)
+
+
+@pytest.fixture
+def large_synthetic_canonical() -> pd.DataFrame:
+    """Enough rows that every code path with a minimum-size guard runs."""
+    return _canonical_records(2000, seed=1)
 
 
 # ---------------------------------------------------------------------------

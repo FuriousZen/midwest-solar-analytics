@@ -73,6 +73,30 @@ def test_prediction_interval_is_well_formed(client):
     assert 0 <= body["p10_days"] <= body["p90_days"] <= body["horizon_days"]
 
 
+def test_point_estimate_lies_inside_its_interval(client):
+    """The point and the interval come from different boosters.
+
+    Nothing about two separately fitted models keeps one inside the other, so
+    the service has to enforce it. Checked across several requests, including
+    ones with no context, so the property is not an accident of one row.
+    """
+    bodies = [BODY, dict(BODY, start_date="2025-01-20", system_size_kw=24.0)]
+    bodies += [
+        {"jurisdiction": "Testville", "start_date": "2024-05-01"},
+        {"jurisdiction": "Nowhere-on-Sea", "start_date": "2023-11-11"},
+        dict(BODY, jurisdiction="Sampleburg", contractor="BRIGHT ROOF", battery=1),
+    ]
+    for body in bodies:
+        r = client.post("/predict", json=body)
+        assert r.status_code == 200, r.text
+        p = r.json()
+        assert p["p10_days"] <= p["predicted_days"] <= p["p90_days"], p
+
+    batch = client.post("/predict/batch", json={"items": bodies}).json()["predictions"]
+    for p in batch:
+        assert p["p10_days"] <= p["predicted_days"] <= p["p90_days"], p
+
+
 def test_interval_covers_most_of_a_holdout_like_sample(client):
     """Sanity check that the interval is not degenerate (zero-width)."""
     widths = []
@@ -251,16 +275,24 @@ def test_source_level_is_replayed_from_the_jurisdiction(model_root):
     assert pd.isna(unknown["source"].iloc[0])
 
 
-def test_explain_is_capped_on_large_batches(client):
+def test_explain_on_an_oversized_batch_is_refused_not_silently_dropped(client):
     from msa.serve.app import MAX_EXPLAIN_BATCH
 
     big = {"items": [BODY] * (MAX_EXPLAIN_BATCH + 5)}
     r = client.post("/predict/batch?explain=true", json=big)
-    assert r.status_code == 200
-    preds = r.json()["predictions"]
-    assert len(preds) == MAX_EXPLAIN_BATCH + 5
-    assert all(p["attributions"] is None for p in preds)
+    assert r.status_code == 422
+    body = r.json()
+    assert body["error"] == "explain_batch_too_large"
+    assert str(MAX_EXPLAIN_BATCH) in body["detail"]
+    assert set(body) == {"error", "detail", "request_id"}
 
-    small = {"items": [BODY] * 3}
-    r2 = client.post("/predict/batch?explain=true", json=small)
+    # the same batch without the flag is fine
+    r_plain = client.post("/predict/batch", json=big)
+    assert r_plain.status_code == 200
+    assert len(r_plain.json()["predictions"]) == MAX_EXPLAIN_BATCH + 5
+
+    # and a batch at the cap is explained
+    at_cap = {"items": [BODY] * MAX_EXPLAIN_BATCH}
+    r2 = client.post("/predict/batch?explain=true", json=at_cap)
+    assert r2.status_code == 200
     assert all(p["attributions"] for p in r2.json()["predictions"])

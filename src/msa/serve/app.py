@@ -7,7 +7,8 @@ Endpoints
                            canary request
 ``GET  /metadata``         full model card: metrics, features, jurisdictions
 ``POST /predict``          one project  (``?explain=true`` adds SHAP attributions)
-``POST /predict/batch``    up to 1000 projects in one call
+``POST /predict/batch``    up to 1000 projects in one call; ``?explain=true`` is
+                           accepted up to a smaller cap and answers 422 above it
 ``GET  /metrics``          in-process request counters and latency percentiles
 
 Run::
@@ -69,6 +70,7 @@ from msa.features.build import (
     FEATURES,
     as_model_frame,
     back_transform,
+    contain_point,
 )
 from msa.features.store import apply_store, load_store
 from msa.serve.logging_config import (
@@ -94,8 +96,9 @@ SEGMENT = os.environ.get("MSA_SERVE_SEGMENT", DEFAULT_SEGMENT)
 TOP_ATTRIBUTIONS = 8
 
 #: TreeSHAP over a full batch is far more expensive than prediction, so
-#: ``?explain=true`` is only honoured for batches up to this size. Larger
-#: batches still return predictions; they just do not carry attributions.
+#: ``?explain=true`` is only accepted for batches up to this size. A larger
+#: explained batch is refused with 422 rather than silently answered without
+#: attributions, so a caller never mistakes a dropped field for an empty one.
 MAX_EXPLAIN_BATCH = MAX_EXPLAIN_BATCH_ITEMS
 
 #: TreeSHAP allocates an ``(n_rows, n_features + 1)`` float64 matrix per call
@@ -111,6 +114,20 @@ MAX_BODY_BYTES = int(os.environ.get("MSA_MAX_BODY_BYTES", str(4 * 1024 * 1024)))
 
 #: Header carrying the correlation id, in and out.
 REQUEST_ID_HEADER = "X-Request-ID"
+
+
+class ExplainBatchTooLarge(StarletteHTTPException):
+    """``?explain=true`` on a batch above ``MAX_EXPLAIN_BATCH``."""
+
+    def __init__(self, n_items: int):
+        super().__init__(
+            status_code=422,
+            detail=(
+                f"?explain=true is accepted for batches of {MAX_EXPLAIN_BATCH} "
+                f"items or fewer; this batch has {n_items}. Drop the flag or "
+                f"split the batch."
+            ),
+        )
 
 
 def _degraded_start_allowed() -> bool:
@@ -601,6 +618,9 @@ def create_app(
     @app.exception_handler(StarletteHTTPException)
     async def _on_http_error(request: Request, exc: StarletteHTTPException):
         detail = exc.detail if isinstance(exc.detail, str) else "request failed"
+        if isinstance(exc, ExplainBatchTooLarge):
+            counters.incr("errors")
+            return _error(422, "explain_batch_too_large", detail, request)
         code = {
             404: "not_found",
             405: "method_not_allowed",
@@ -627,13 +647,25 @@ def create_app(
         return bundle
 
     def _predict(items: list[PermitRequest], explain: bool) -> list[PredictionResponse]:
+        """Score ``items``; the point estimate always lies inside its interval.
+
+        The point comes from the tuned booster and p10/p90 from the quantile
+        booster plus the conformal widening, so nothing else keeps them
+        consistent. The interval is widened to contain the point rather than
+        the point clamped into the interval: widening can only raise coverage,
+        so the calibrated coverage claim on the interval still holds, whereas
+        moving the point would make the service answer a different number
+        from the one the holdout metrics were computed on. ``final.py``
+        applies the same rule when it scores the holdout.
+        """
         b = _require_bundle()
+        if explain and len(items) > MAX_EXPLAIN_BATCH:
+            raise ExplainBatchTooLarge(len(items))
         X = request_frame(items, b)
         preds = back_transform(b.model.predict(X), b.log_target, b.horizon)
 
         # TreeSHAP is computed once for the whole frame; calling it per row
         # would make an explained batch quadratic in the batch size.
-        explain = explain and len(X) <= MAX_EXPLAIN_BATCH
         shap_values = b.shap_values(X) if explain else None
 
         bounds = None
@@ -646,6 +678,7 @@ def create_app(
             q[:, 0] -= b.conformal_delta
             q[:, -1] += b.conformal_delta
             bounds = np.clip(q, 0.0, b.horizon)
+            bounds[:, 0], bounds[:, -1] = contain_point(bounds[:, 0], bounds[:, -1], preds)
 
         out = []
         for i, item in enumerate(items):
@@ -907,6 +940,7 @@ __all__ = [
     "MAX_CONCURRENT_EXPLAIN",
     "MAX_EXPLAIN_BATCH",
     "BodySizeLimitMiddleware",
+    "ExplainBatchTooLarge",
     "ModelBundle",
     "app",
     "create_app",

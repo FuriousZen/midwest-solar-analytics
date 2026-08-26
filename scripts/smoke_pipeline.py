@@ -2,16 +2,16 @@
 
 This is the fast, network-free equivalent of ``./scripts/run_pipeline.sh``:
 it exercises every real entrypoint (baselines, Optuna, final fit, SHAP
-dashboard, the FastAPI service, the latency benchmark, the MLflow export and
-the results generator) against a small synthetic corpus.
+dashboard, the FastAPI service, the latency benchmark and the MLflow export)
+against a small synthetic corpus.
 
 It exists so CI can prove the *chain* still works after every change, which is
 a different question from whether the units work. A broken hand-off between
 ``final.py`` and ``serve/app.py`` passes every unit test and fails here.
 
-Nothing it writes touches the repository: paths, the MLflow store and the docs
-output directory are all redirected into ``--root`` (a temp directory by
-default) via the environment, before ``msa`` is imported.
+Nothing it writes touches the repository: paths and the MLflow store are all
+redirected into ``--root`` (a temp directory by default) via the environment,
+before ``msa`` is imported.
 
 It is not a measurement. The corpus is generated, so no number it prints
 means anything about solar permits; the only assertion is that each stage
@@ -199,13 +199,8 @@ def main() -> None:
 
     root = Path(args.root) if args.root else Path(tempfile.mkdtemp(prefix="msa-smoke-"))
     root.mkdir(parents=True, exist_ok=True)
-    data, models, reports, docs = (
-        root / "data",
-        root / "models",
-        root / "reports",
-        root / "docs",
-    )
-    for d in (data / "processed", models, reports, docs):
+    data, models, reports = root / "data", root / "models", root / "reports"
+    for d in (data / "processed", models, reports):
         d.mkdir(parents=True, exist_ok=True)
 
     env = {
@@ -213,7 +208,6 @@ def main() -> None:
         "MSA_DATA_DIR": str(data),
         "MSA_MODELS_DIR": str(models),
         "MSA_REPORTS_DIR": str(reports),
-        "MSA_DOCS_DIR": str(docs),
         "MSA_DISABLE_TTS": "1",
         "MLFLOW_TRACKING_URI": f"sqlite:///{root / 'mlflow.db'}",
         "MLFLOW_ARTIFACT_ROOT": str(root / "mlartifacts"),
@@ -303,12 +297,6 @@ def main() -> None:
 
         runner.run("mlflow export", "scripts.export_mlflow_summary")
         require([reports / "mlflow_runs_summary.json"], "mlflow export")
-
-        runner.run("results tables", "scripts.make_results_tables")
-        require([docs / "RESULTS.md"], "results")
-
-        # the smoke run must not have touched the committed docs
-        assert (REPO_ROOT / "docs" / "RESULTS.md").exists()
     finally:
         total = sum(t for _, t in runner.timings)
         print("\n--- stage timings ---")

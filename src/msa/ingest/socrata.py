@@ -31,6 +31,9 @@ LOG = logging.getLogger(__name__)
 
 PAGE_SIZE = 20_000
 _TIMEOUT = 120
+#: Hard stop on offset paging. Every dataset in this corpus is well under this
+#: many pages; going past it means the portal is not honouring ``$offset``.
+MAX_PAGES = 200
 
 
 def _headers() -> dict[str, str]:
@@ -49,16 +52,6 @@ def _get(url: str, params: dict[str, str]) -> requests.Response:
     )
 
 
-def count(domain: str, dataset_id: str, where: str | None = None) -> int:
-    """Return the number of rows matching ``where``."""
-    url = f"https://{domain}/resource/{dataset_id}.json"
-    params = {"$select": "count(1) as n"}
-    if where:
-        params["$where"] = where
-    payload = _get(url, params).json()
-    return int(payload[0]["n"])
-
-
 def fetch_csv(
     domain: str,
     dataset_id: str,
@@ -74,6 +67,12 @@ def fetch_csv(
     ``order`` is mandatory: Socrata does not guarantee a stable row order across
     paginated requests unless an explicit ``$order`` is supplied, which would
     silently produce duplicated/missing rows.
+
+    A response with no rows raises :class:`SourceUnavailable` and is never
+    cached. Every dataset this project queries has matching rows, so an empty
+    answer means the query or the portal is broken (a double-encoded ``%``
+    in the predicate, for instance, matches nothing and returns 200), and
+    caching it would make the failure permanent.
     """
     if cache_path is not None and cache_path.exists() and not refresh:
         LOG.info("Using cached %s", cache_path)
@@ -82,7 +81,7 @@ def fetch_csv(
     url = f"https://{domain}/resource/{dataset_id}.csv"
     frames: list[pd.DataFrame] = []
     offset = 0
-    while True:
+    for _page in range(MAX_PAGES):
         params: dict[str, str] = {
             "$order": order,
             "$limit": str(PAGE_SIZE),
@@ -130,8 +129,21 @@ def fetch_csv(
         if len(page) < PAGE_SIZE:
             break
         offset += PAGE_SIZE
+    else:
+        raise SourceUnavailable(
+            f"socrata:{domain}/{dataset_id} did not terminate within {MAX_PAGES} "
+            f"pages ({MAX_PAGES * PAGE_SIZE} rows); the portal is probably "
+            f"ignoring $offset",
+            source=f"socrata:{domain}/{dataset_id}",
+        )
 
-    df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    if not frames:
+        raise SourceUnavailable(
+            f"socrata:{domain}/{dataset_id} returned no rows for this query; "
+            f"nothing was cached",
+            source=f"socrata:{domain}/{dataset_id}",
+        )
+    df = pd.concat(frames, ignore_index=True)
     if cache_path is not None:
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(cache_path, index=False)

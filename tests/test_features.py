@@ -80,7 +80,7 @@ def test_no_feature_name_collisions():
 
 
 def test_absolute_time_index_is_excluded():
-    """Year / days-since-start memorise period levels and do not extrapolate."""
+    """An absolute date index has no defined value past the training window."""
     assert "start_year" not in FEATURES
     assert "days_since_series_start" not in FEATURES
 
@@ -187,17 +187,24 @@ def test_shuffling_the_target_destroys_signal(synthetic_canonical):
 # --------------------------------------------------------------------------
 
 
-def test_conformal_delta_lifts_coverage_towards_nominal(synthetic_canonical):
-    """CQR must move empirical coverage towards the nominal 80%, not away."""
+def test_conformal_delta_lifts_coverage_towards_nominal(large_synthetic_canonical):
+    """CQR must move empirical coverage towards the nominal 80%, not away.
+
+    ``calibrate_conformal`` returns 0 without doing anything when the
+    calibration slice would be too small, which would make the assertion
+    below compare a quantity with itself; the fixture is sized so that the
+    real path runs, and the precondition is asserted first.
+    """
     from msa.train.data import Dataset
     from msa.train.final import (
+        CALIBRATION_FRACTION,
         QUANTILES,
         calibrate_conformal,
         fit_quantiles,
         predict_quantiles,
     )
 
-    df = clean(synthetic_canonical, segment="permit_to_completion")
+    df = clean(large_synthetic_canonical, segment="permit_to_completion")
     X, y = build_features(df)
     cut = int(len(X) * 0.75)
     ds = Dataset(
@@ -211,10 +218,15 @@ def test_conformal_delta_lifts_coverage_towards_nominal(synthetic_canonical):
         categories={c: list(map(str, X[c].cat.categories)) for c in CATEGORICAL_FEATURES},
         segment="permit_to_completion",
     )
+    n_train = len(ds.X_train)
+    n_calib = n_train - int(n_train * (1.0 - CALIBRATION_FRACTION))
+    assert n_calib >= 50, "fixture too small: calibrate_conformal would return 0 early"
+
     params = {"n_estimators": 60, "max_depth": 3}
     horizon = float(max_timeline_days("permit_to_completion"))
     delta = calibrate_conformal(ds, params, log_target=False, horizon=horizon)
     assert np.isfinite(delta)
+    assert delta != 0.0, "delta of exactly 0 means the early return was hit"
 
     q = predict_quantiles(
         fit_quantiles(ds, params, False), ds.X_test, False, horizon
@@ -231,8 +243,8 @@ def test_conformal_delta_lifts_coverage_towards_nominal(synthetic_canonical):
 def test_back_transform_never_returns_infinity():
     """A log-target booster can emit a score whose expm1 overflows to +inf.
 
-    That killed trial 185 of the first 200-trial study, so the back-transform is
-    clamped in log space and the behaviour is pinned here.
+    That once aborted an Optuna trial, so the back-transform is clamped in log
+    space and the behaviour is pinned here.
     """
     from msa.train.tune import back_transform
 

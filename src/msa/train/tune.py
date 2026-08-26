@@ -1,4 +1,4 @@
-"""200-trial Optuna hyper-parameter search for the XGBoost timeline regressor.
+"""Optuna hyper-parameter search for the XGBoost timeline regressor.
 
 Protocol
 --------
@@ -15,7 +15,8 @@ Protocol
 
 Run::
 
-    python -m msa.train.tune --trials 200
+    python -m msa.train.tune --trials 200            # resumes a stored study
+    python -m msa.train.tune --trials 200 --fresh    # discards it and starts over
 """
 
 from __future__ import annotations
@@ -39,6 +40,7 @@ from msa.config import (
     REPO_ROOT,
     REPORTS_DIR,
     SEGMENTS,
+    ensure_dirs,
     max_timeline_days,
 )
 from msa.features.build import back_transform
@@ -140,14 +142,29 @@ def run_study(
     log_to_mlflow: bool = True,
     study_name: str = "xgb-timeline-tpe",
     storage: str | None = None,
+    fresh: bool = False,
 ) -> optuna.Study:
+    """Run (or resume) the study and return it.
+
+    ``n_trials`` is the total budget for the study, not the number of new
+    trials: with persistent storage a rerun picks up where it stopped and
+    runs only the trials still owed, so a second run with the same budget
+    runs nothing. ``fresh=True`` deletes the stored study first.
+    """
     X, y = ds.X_train, ds.y_train
     cv = make_cv()
     horizon = float(max_timeline_days(ds.segment))
 
-    # Persistent storage: a 200-trial study takes ~1 hour, so losing it to a
-    # crash (or a killed shell) is expensive. With `load_if_exists=True` a rerun
-    # picks up where it stopped and only runs the trials still owed.
+    if fresh and storage:
+        try:
+            optuna.delete_study(study_name=study_name, storage=storage)
+        except KeyError:
+            pass
+        else:
+            LOG.info("deleted stored study %s (--fresh)", study_name)
+
+    # Persistent storage: a full study runs for long enough that losing it to
+    # a crash or a killed shell is expensive, so it is resumable by default.
     sampler = TPESampler(seed=RANDOM_SEED, multivariate=True, n_startup_trials=25)
     study = optuna.create_study(
         direction="minimize",
@@ -157,8 +174,27 @@ def run_study(
         load_if_exists=True,
     )
     already = len([t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE])
-    if already:
-        LOG.info("resuming study %s with %d completed trials", study_name, already)
+    remaining = max(n_trials - already, 0)
+    if already and remaining:
+        LOG.info(
+            "study %s already holds %d completed trials; running the %d still "
+            "owed out of a budget of %d (pass --fresh to start over)",
+            study_name,
+            already,
+            remaining,
+            n_trials,
+        )
+    elif already:
+        LOG.warning(
+            "study %s already holds %d completed trials, which meets the budget "
+            "of %d: no new trials will run. Raise --trials to extend the study "
+            "or pass --fresh to start over.",
+            study_name,
+            already,
+            n_trials,
+        )
+    else:
+        LOG.info("starting study %s with a budget of %d trials", study_name, n_trials)
 
     def objective(trial: optuna.Trial) -> float:
         log_target = trial.suggest_categorical("log1p_target", [False, True])
@@ -190,12 +226,11 @@ def run_study(
         trial.set_user_attr("seconds", elapsed)
         return agg["cv_mae"]
 
-    remaining = max(n_trials - already, 0)
     study.optimize(
         objective,
         n_trials=remaining,
         gc_after_trial=True,
-        # One pathological configuration must not abort a one-hour search. The
+        # One pathological configuration must not abort a long search. The
         # failure is recorded on the trial and the sampler moves on.
         catch=(ValueError, ArithmeticError),
     )
@@ -212,7 +247,13 @@ def main() -> None:
         default=f"sqlite:///{REPO_ROOT / 'optuna.db'}",
         help="Optuna storage URL; pass '' to keep the study in memory only",
     )
+    ap.add_argument(
+        "--fresh",
+        action="store_true",
+        help="delete any stored study of the same name and start over",
+    )
     args = ap.parse_args()
+    ensure_dirs()
     rd = report_dir(args.segment)
     study_path = rd / "optuna_study.json"
     best_params_path = rd / "best_params.json"
@@ -244,13 +285,18 @@ def main() -> None:
             log_to_mlflow=not args.no_mlflow,
             study_name=f"xgb-{args.segment}-tpe",
             storage=args.storage,
+            fresh=args.fresh,
         )
         wall = time.perf_counter() - t0
 
-        # baseline reference: identical folds, stock hyper-parameters
+        # baseline reference: identical folds, stock hyper-parameters, and the
+        # same clamp the tuned model's out-of-fold predictions go through
         from msa.train.baseline import _oof_sklearn, default_xgb
 
-        base_oof = _oof_sklearn(default_xgb, ds.X_train, ds.y_train, make_cv())
+        horizon = float(max_timeline_days(args.segment))
+        base_oof = back_transform(
+            _oof_sklearn(default_xgb, ds.X_train, ds.y_train, make_cv()), False, horizon
+        )
         base = regression_metrics(ds.y_train, base_oof, prefix="cv_")
 
         best = study.best_trial
